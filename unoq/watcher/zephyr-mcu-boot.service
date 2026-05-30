@@ -1,0 +1,18 @@
+[Unit]
+Description=Boot the UNO Q STM32 MCU into flash (BOOT0-hold reset)
+Documentation=file:///home/root/zephyr-flash/README
+# Run after the filesystem + basic system is up. The flasher bundle lives under
+# /home/root so wait for local filesystems.
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# recover.sh holds BOOT0 (gpiochip1:37) LOW and pulses an SWD reset so the MCU
+# latches boot-from-flash instead of coming up in the ROM bootloader. It only
+# resets -- it does not reflash -- so it is safe to run unconditionally at boot.
+ExecStart=/home/root/zephyr-flash/oo/recover.sh
+
+[Install]
+WantedBy=multi-user.target

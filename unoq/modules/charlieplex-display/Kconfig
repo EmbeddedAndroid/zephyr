@@ -1,0 +1,4 @@
+# Pull the driver's Kconfig into the build. When upstreaming, this single line
+# becomes `source "drivers/display/Kconfig.charlieplex_led_matrix"` inside
+# Zephyr's drivers/display/Kconfig.
+rsource "drivers/display/Kconfig"

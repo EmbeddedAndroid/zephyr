@@ -1,0 +1,13 @@
+[Unit]
+Description=Flash the incoming Zephyr image to the UNO Q STM32U585 over SWD
+Documentation=file:///home/root/zephyr-flash/README
+
+[Service]
+Type=oneshot
+# flash.sh holds BOOT0 low, writes+verifies to 0x08000000, resets into flash.
+# Status (rc + tail of openocd log) is written where adb can pull it.
+ExecStart=/home/root/zephyr-flash/flash-incoming.sh
+Nice=0
+
+[Install]
+WantedBy=multi-user.target

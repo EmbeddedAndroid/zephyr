@@ -1,0 +1,25 @@
+/*
+ * Enable FDCAN1 on the Arduino UNO Q (STM32U585) for loopback testing.
+ *
+ * FDCAN1 needs a kernel clock in addition to its bus clock: we use PLL1_Q,
+ * which the board already enables (&pll1 div-q = <2>). Pins PD0 (RX) / PD1 (TX)
+ * are free on this board (same pins the nucleo_u5a5zj_q reference uses). For
+ * on-chip CAN_MODE_LOOPBACK no transceiver or external wiring is required, but
+ * the dt binding still requires pinctrl-0.
+ *
+ * zephyr,canbus chosen so the can shell / DEVICE_DT_GET(DT_CHOSEN(...)) works.
+ */
+
+/ {
+	chosen {
+		zephyr,canbus = &fdcan1;
+	};
+};
+
+&fdcan1 {
+	clocks = <&rcc STM32_CLOCK(APB1_2, 9)>,
+		 <&rcc STM32_SRC_PLL1_Q FDCAN1_SEL(1)>;
+	pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+	pinctrl-names = "default";
+	status = "okay";
+};

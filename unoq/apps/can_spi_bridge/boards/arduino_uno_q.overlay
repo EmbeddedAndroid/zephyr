@@ -1,0 +1,41 @@
+/*
+ * CAN<->SPI bridge overlay for the Arduino UNO Q (STM32U585).
+ *
+ * Combines the two proven bring-ups:
+ *  - FDCAN1 enabled for on-chip loopback (kernel clock PLL1_Q, pins PD0/PD1).
+ *  - SPI3 as SPI slave (board default pins SCK=PG9/MISO=PG10/MOSI=PB5/NSS=PG12),
+ *    driven by the QCM /dev/spidev0.0 master.
+ *
+ * For loopback no CAN transceiver/wiring is needed; the binding still wants
+ * pinctrl-0. SPI3 is already `okay` in the board dts, so no spi node change
+ * here -- we just enable fdcan1.
+ */
+
+/ {
+	chosen {
+		zephyr,canbus = &fdcan1;
+	};
+
+	/*
+	 * RDY flow-control line: STM32 PG13 == QCM gpiochip1:70. The MCU drives
+	 * it HIGH when it has CAN RX frames queued for the Linux master to read.
+	 * Free on this board (PG13 is not used by SPI3/fdcan/LEDs). Exposed via
+	 * the standard zephyr,user node (no custom binding needed).
+	 */
+	zephyr,user {
+		rdy-gpios = <&gpiog 13 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&fdcan1 {
+	clocks = <&rcc STM32_CLOCK(APB1_2, 9)>,
+		 <&rcc STM32_SRC_PLL1_Q FDCAN1_SEL(1)>;
+	pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+	pinctrl-names = "default";
+	/* CAN FD: 500 kbit/s arbitration, 2 Mbit/s data phase (BRS). */
+	bitrate = <500000>;
+	sample-point = <875>;
+	bus-speed-data = <2000000>;
+	sample-point-data = <800>;
+	status = "okay";
+};

@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch for a new Zephyr MCU firmware image to flash
+Documentation=file:///home/root/zephyr-flash/README
+
+[Path]
+# Fires whenever the incoming image is rewritten (adb push replaces it).
+# PathChanged triggers on close-after-write, so a partial push won't fire mid-copy.
+PathChanged=/home/root/zephyr-flash/incoming.bin
+Unit=zephyr-flash.service
+
+[Install]
+WantedBy=multi-user.target

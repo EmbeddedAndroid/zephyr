@@ -1,0 +1,6 @@
+name: charlieplex_display
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .

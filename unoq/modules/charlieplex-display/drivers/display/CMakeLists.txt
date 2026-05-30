@@ -1,0 +1,2 @@
+zephyr_library()
+zephyr_library_sources_ifdef(CONFIG_CHARLIEPLEX_LED_MATRIX display_charlieplex_led_matrix.c)
