@@ -81,6 +81,63 @@ class RawSpi:
             self.fd.close()
 
 
+def _ioc(direction, typ, nr, size):
+    op = (direction << 30) | (size << 16) | (typ << 8) | nr
+    # fcntl.ioctl wants a C (long) request; fold values >= 2**31 to signed.
+    if op >= 0x80000000:
+        op -= 0x100000000
+    return op
+
+
+class GpioLine:
+    """Read a single GPIO line via the cdev v2 uAPI (the stock image has no
+    libgpiod python bindings, so we issue the GPIO_V2 ioctls by hand, exactly
+    like RawSpi does for spidev). Used to honour the bridge RDY handshake: the
+    STM32 raises RDY only while it is parked in spi_transceive, and drops it
+    while it erases/programs flash inside process_block. The host must not
+    clock a block unless RDY is high, or the slave silently drops it."""
+
+    GPIO_V2_LINE_FLAG_INPUT = 1 << 2
+
+    def __init__(self, chip, offset, consumer=b"otaflow"):
+        self.cfd = open("/dev/%s" % chip, "r+b", buffering=0)
+        offsets = struct.pack("<64I", offset, *([0] * 63))          # 256
+        cons = consumer[:31].ljust(32, b"\x00")                     # 32
+        cfg = (struct.pack("<QI", self.GPIO_V2_LINE_FLAG_INPUT, 0)  # flags+num_attrs
+               + b"\x00" * 20                                       # padding[5]
+               + b"\x00" * 240)                                     # attrs[10]*24
+        tail = (struct.pack("<II", 1, 0)                            # num_lines, evbuf
+                + b"\x00" * 20                                      # padding[5]
+                + struct.pack("<i", 0))                             # fd (filled in)
+        req = bytearray(offsets + cons + cfg + tail)
+        assert len(req) == 592, len(req)
+        GPIO_V2_GET_LINE_IOCTL = _ioc(3, 0xB4, 0x07, 592)
+        buf = array.array("B", req)
+        fcntl.ioctl(self.cfd, GPIO_V2_GET_LINE_IOCTL, buf, True)
+        self.lfd = struct.unpack_from("<i", buf, 588)[0]
+        self._get_values = _ioc(3, 0xB4, 0x0E, 16)
+
+    def get(self):
+        vbuf = array.array("B", struct.pack("<QQ", 0, 1))  # bits=0, mask=bit0
+        fcntl.ioctl(self.lfd, self._get_values, vbuf, True)
+        return struct.unpack_from("<Q", vbuf, 0)[0] & 1
+
+    def wait_high(self, timeout=5.0):
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if self.get():
+                return True
+        return False
+
+    def close(self):
+        import os
+        try:
+            os.close(self.lfd)
+        except Exception:
+            pass
+        self.cfd.close()
+
+
 # --- protocol ----------------------------------------------------------------
 BLOCK_SIZE = 64
 CRC_OFFSET = BLOCK_SIZE - 2
@@ -89,10 +146,14 @@ VERSION = 0x01
 
 TYPE_FB = 0x01
 TYPE_CMD = 0x02
+TYPE_OTA_BEGIN = 0x03
+TYPE_OTA_DATA = 0x04
+TYPE_OTA_END = 0x05
 TYPE_STATUS = 0x10
 TYPE_VERSION = 0x11
 
-CMD = {"blank-on": 1, "blank-off": 2, "brightness": 3, "query": 4, "version": 5}
+CMD = {"blank-on": 1, "blank-off": 2, "brightness": 3, "query": 4,
+       "version": 5, "confirm": 6}
 
 WIDTH = 13
 HEIGHT = 8
@@ -131,8 +192,12 @@ def parse_status(rx):
     if len(body) < 16:
         return None
     fd, blocks, ce, seq, typ, state, rdy = struct.unpack("<IIIBBBB", body[:16])
-    return {"frames_drawn": fd, "blocks": blocks, "crc_err": ce,
-            "last_seq": seq, "last_type": typ, "state": state, "rdy": rdy}
+    out = {"frames_drawn": fd, "blocks": blocks, "crc_err": ce,
+           "last_seq": seq, "last_type": typ, "state": state, "rdy": rdy}
+    if len(body) >= 22:
+        ota_w, conf, oerr = struct.unpack("<IBB", body[16:22])
+        out.update(ota_written=ota_w, confirmed=conf, ota_err=oerr)
+    return out
 
 
 # 5x7 font, columns left-to-right, bit0 = top row. Uppercased text only.
@@ -212,6 +277,16 @@ def main():
     pk.add_argument("--text", default=None,
                     help="override text (default: live kernel release)")
     sub.add_parser("versions")
+    po = sub.add_parser("ota")
+    po.add_argument("image", help="signed image (zephyr.signed.bin) to stream")
+    po.add_argument("--permanent", action="store_true",
+                    help="permanent swap (default: revertible test swap)")
+    po.add_argument("--chunk", type=int, default=48, help="payload bytes per block")
+    po.add_argument("--rdy-chip", dest="rdy_chip", default="gpiochip1",
+                    help="GPIO chip carrying the MCU RDY line (Linux side)")
+    po.add_argument("--rdy-line", dest="rdy_line", type=int, default=70,
+                    help="GPIO line offset of the MCU RDY signal")
+    sub.add_parser("confirm")
     sub.add_parser("all-on")
     sub.add_parser("clear")
     pc = sub.add_parser("cmd")
@@ -356,6 +431,70 @@ def main():
         except KeyboardInterrupt:
             pass
 
+
+    elif args.mode == "confirm":
+        send(TYPE_CMD, bytes([CMD["confirm"], 0]))
+        st = send(TYPE_CMD, bytes([CMD["query"], 0]))
+        print("status:", st, flush=True)
+    elif args.mode == "ota":
+        data = open(args.image, "rb").read()
+        total = len(data)
+        print("OTA streaming %d bytes from %s (%s swap)" %
+              (total, args.image, "permanent" if args.permanent else "test"),
+              flush=True)
+        # RDY flow control: the STM32 is a blocking single-block SPI slave --
+        # it raises RDY (gpiochip1:70 on the Linux side) only while parked in
+        # spi_transceive, and drops it while it runs flash erase/program inside
+        # process_block. If the host clocks a block while RDY is low the slave
+        # silently drops it, which corrupted the image head (the OTA_BEGIN erase
+        # alone is tens of ms). So wait for RDY=high before EVERY transfer.
+        rdy = GpioLine(args.rdy_chip, args.rdy_line)
+
+        def xfer_rdy(block, wait=2.0):
+            if not rdy.wait_high(wait):
+                raise RuntimeError("RDY stuck low > %.1fs" % wait)
+            return spi.xfer2(block)
+
+        # BEGIN: tell the MCU the total size and init slot1 (triggers the slot1
+        # erase -- RDY stays low through it, so the next xfer_rdy blocks here).
+        xfer_rdy(make_block(TYPE_OTA_BEGIN, seq, struct.pack("<I", total)))
+        seq += 1
+        # DATA: one block per transfer, each gated on RDY. No windowing needed:
+        # RDY guarantees every block is delivered, so ota_written tracks sent.
+        step = max(1, min(args.chunk, CRC_OFFSET - 5))
+        sent = 0
+        acked = 0
+        while sent < total:
+            piece = data[sent:sent + step]
+            # The slot1 erase can take several seconds on STM32U5.
+            rx = xfer_rdy(make_block(TYPE_OTA_DATA, seq & 0xFF, piece), wait=8.0)
+            seq += 1
+            sent += len(piece)
+            st = parse_status(rx)
+            if isinstance(st, dict) and "ota_written" in st:
+                acked = st["ota_written"]
+                if st.get("ota_err", 0):
+                    print("\nMCU ota_err=%d, aborting" % st["ota_err"], flush=True)
+                    rdy.close()
+                    spi.close()
+                    return
+            if (seq % 64) == 0:
+                print("  sent=%d acked=%d / %d" % (sent, acked, total),
+                      end="\r", flush=True)
+            if args.delay:
+                time.sleep(args.delay)
+        print("  sent=%d / %d (streaming done)" % (sent, total), flush=True)
+        # Read back the MCU's accounting once more (RDY-gated).
+        st = parse_status(xfer_rdy(make_block(TYPE_CMD, seq & 0xFF,
+                                              bytes([CMD["query"], 0]))))
+        seq += 1
+        print("pre-end status:", st, flush=True)
+        # END: request the swap (permanent or test) and reboot.
+        perm = 1 if args.permanent else 0
+        xfer_rdy(make_block(TYPE_OTA_END, seq & 0xFF, bytes([perm])))
+        print("OTA_END sent (permanent=%d); MCU will reboot into MCUboot." % perm,
+              flush=True)
+        rdy.close()
     spi.close()
 
 

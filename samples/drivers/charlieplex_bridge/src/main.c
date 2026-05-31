@@ -40,6 +40,9 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/version.h>
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/dfu/flash_img.h>
+#include <zephyr/sys/reboot.h>
 #include <string.h>
 
 LOG_MODULE_REGISTER(charlieplex_bridge, LOG_LEVEL_INF);
@@ -49,16 +52,20 @@ LOG_MODULE_REGISTER(charlieplex_bridge, LOG_LEVEL_INF);
 #define BLK_MAGIC   0xA5
 #define BLK_VERSION 0x01
 
-#define TYPE_FB      0x01
-#define TYPE_CMD     0x02
-#define TYPE_STATUS  0x10
-#define TYPE_VERSION 0x11
+#define TYPE_FB        0x01
+#define TYPE_CMD       0x02
+#define TYPE_OTA_BEGIN 0x03  /* payload: u32 total image size; init slot1 write */
+#define TYPE_OTA_DATA  0x04  /* payload: next image chunk, streamed to slot1 */
+#define TYPE_OTA_END   0x05  /* payload[0]: permanent flag; request swap + reboot */
+#define TYPE_STATUS    0x10
+#define TYPE_VERSION   0x11
 
 #define CMD_BLANK_ON   1
 #define CMD_BLANK_OFF  2
 #define CMD_BRIGHTNESS 3
 #define CMD_QUERY      4
 #define CMD_VERSION    5    /* host asks for the MCU's Zephyr version string */
+#define CMD_CONFIRM    6    /* mark the running image confirmed (cancel revert) */
 
 #define MAX_FB_BYTES 32      /* >= stride*height for panels up to 16x16 mono */
 
@@ -84,6 +91,9 @@ struct bridge_status {
 	uint8_t  last_type;
 	uint8_t  state;
 	uint8_t  rdy;
+	uint32_t ota_written;   /* bytes streamed into slot1 so far */
+	uint8_t  confirmed;     /* 1 if the running image is confirmed */
+	uint8_t  ota_err;       /* last OTA error code, 0 = none */
 } __packed;
 
 volatile uint32_t g_state;
@@ -97,6 +107,14 @@ volatile uint32_t g_rdy_level;
  * carries a TYPE_VERSION payload instead of the normal status.
  */
 static bool pending_version;
+
+/* OTA streaming state. The DFU flash_img helper writes the incoming image into
+ * the secondary slot (image-1); MCUboot swaps it in on the next boot.
+ */
+static struct flash_img_context ota_ctx;
+static bool ota_active;
+static uint8_t ota_err;
+static bool pending_reboot;
 
 static uint8_t spi_tx[BLOCK_SIZE];
 static uint8_t spi_rx[BLOCK_SIZE];
@@ -157,11 +175,66 @@ static void handle_cmd(uint8_t cmd, uint8_t arg)
 	case CMD_VERSION:
 		pending_version = true;
 		break;
+	case CMD_CONFIRM:
+		/* Cancel a pending revert: mark the running image good. */
+		boot_write_img_confirmed();
+		break;
 	case CMD_QUERY:
 	default:
 		break;
 	}
 	g_cmds++;
+}
+
+/* ---- OTA: stream a signed image into slot1, then ask MCUboot to swap ---- */
+
+static void ota_begin(void)
+{
+	ota_err = 0;
+	if (flash_img_init(&ota_ctx) != 0) {
+		ota_err = 1;
+		ota_active = false;
+		return;
+	}
+	ota_active = true;
+}
+
+static void ota_data(const uint8_t *chunk, uint8_t len)
+{
+	if (!ota_active) {
+		ota_err = 2;
+		return;
+	}
+	/* flush=false: buffered, flushed to flash as full blocks fill up. */
+	if (flash_img_buffered_write(&ota_ctx, chunk, len, false) != 0) {
+		ota_err = 3;
+		ota_active = false;
+	}
+}
+
+static void ota_end(uint8_t permanent)
+{
+	if (!ota_active) {
+		ota_err = 2;
+		return;
+	}
+	/* Final flush of any partial buffer. */
+	if (flash_img_buffered_write(&ota_ctx, NULL, 0, true) != 0) {
+		ota_err = 4;
+		ota_active = false;
+		return;
+	}
+	ota_active = false;
+
+	/* Ask MCUboot to boot slot1 next reset. permanent=0 is a revertible
+	 * test swap (auto-reverts unless the new image confirms itself).
+	 */
+	if (boot_request_upgrade(permanent ? BOOT_UPGRADE_PERMANENT
+					   : BOOT_UPGRADE_TEST) != 0) {
+		ota_err = 5;
+		return;
+	}
+	pending_reboot = true;
 }
 
 /* Parse one inbound MOSI block. Returns the processed seq. */
@@ -198,6 +271,15 @@ static uint8_t process_block(const uint8_t *blk)
 		if (len >= 2) {
 			handle_cmd(blk[5], blk[6]);
 		}
+		break;
+	case TYPE_OTA_BEGIN:
+		ota_begin();
+		break;
+	case TYPE_OTA_DATA:
+		ota_data(&blk[5], len);
+		break;
+	case TYPE_OTA_END:
+		ota_end(len >= 1 ? blk[5] : 0);
 		break;
 	default:
 		break;
@@ -241,6 +323,9 @@ static void pack_status(uint8_t last_seq, uint8_t last_type)
 		.last_type = last_type,
 		.state = (uint8_t)g_state,
 		.rdy = (uint8_t)g_rdy_level,
+		.ota_written = (uint32_t)flash_img_bytes_written(&ota_ctx),
+		.confirmed = boot_is_img_confirmed() ? 1 : 0,
+		.ota_err = ota_err,
 	};
 
 	memset(spi_tx, 0, BLOCK_SIZE);
@@ -312,9 +397,26 @@ int main(void)
 		}
 		g_blocks++;
 
+		/* Drop RDY while we process this block: process_block() may run a
+		 * slow flash erase/program (OTA), during which the SPI slave is not
+		 * in spi_transceive and would silently drop any block the host
+		 * clocks. pack_response() raises RDY again once the next reply is
+		 * staged, so the host's RDY gate only clocks while we are waiting.
+		 */
+		set_rdy(0);
+
 		uint8_t seq = process_block(spi_rx);
 
 		pack_response(seq, spi_rx[2]);
+
+		/* OTA_END asked us to reboot into the freshly-staged image. Give
+		 * the host a moment to finish its last transfer, then reset so
+		 * MCUboot performs the swap.
+		 */
+		if (pending_reboot) {
+			k_sleep(K_MSEC(200));
+			sys_reboot(SYS_REBOOT_COLD);
+		}
 	}
 
 	return 0;
