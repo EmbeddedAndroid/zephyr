@@ -1,0 +1,20 @@
+/*
+ * SPI bridge overlay for the Arduino UNO Q (STM32U585).
+ *
+ * SPI3 runs as an SPI slave (board default pins SCK=PG9/MISO=PG10/MOSI=PB5/
+ * NSS=PG12), driven by the QCS Linux /dev/spidev master. SPI3 is already
+ * `okay` in the board dts, so it needs no node change here.
+ *
+ * The charlieplex matrix node (chosen zephyr,display) comes from the board dts.
+ */
+
+/ {
+	/*
+	 * RDY flow-control line: STM32 PG13 == QCM gpiochip1:70. The MCU drives
+	 * it HIGH when it has a status/data block staged for the Linux master.
+	 * PG13 is free on this board (not used by SPI3/display/LEDs).
+	 */
+	zephyr,user {
+		rdy-gpios = <&gpiog 13 GPIO_ACTIVE_HIGH>;
+	};
+};
