@@ -113,6 +113,7 @@ static bool pending_version;
  */
 static struct flash_img_context ota_ctx;
 static bool ota_active;
+static bool ota_inited; /* ota_ctx has been flash_img_init'd at least once */
 static uint8_t ota_err;
 static bool pending_reboot;
 
@@ -196,6 +197,7 @@ static void ota_begin(void)
 		ota_active = false;
 		return;
 	}
+	ota_inited = true;
 	ota_active = true;
 }
 
@@ -323,7 +325,14 @@ static void pack_status(uint8_t last_seq, uint8_t last_type)
 		.last_type = last_type,
 		.state = (uint8_t)g_state,
 		.rdy = (uint8_t)g_rdy_level,
-		.ota_written = (uint32_t)flash_img_bytes_written(&ota_ctx),
+		/* Only query the DFU context once an OTA has actually initialized it.
+		 * flash_img_bytes_written() on a zeroed ota_ctx walks into the flash
+		 * layer and, right after an MCUboot swap+reboot, can wedge in a flash
+		 * erase, hanging this app at boot (before the SPI loop starts).
+		 * Reporting 0 until ota_inited keeps the boot path off flash.
+		 */
+		.ota_written = ota_inited ?
+			(uint32_t)flash_img_bytes_written(&ota_ctx) : 0,
 		.confirmed = boot_is_img_confirmed() ? 1 : 0,
 		.ota_err = ota_err,
 	};
