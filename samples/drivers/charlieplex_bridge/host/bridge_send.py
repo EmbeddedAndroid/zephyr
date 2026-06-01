@@ -54,6 +54,14 @@ class RawSpi:
 
     def open(self, bus, dev):
         self.fd = open("/dev/spidev%d.%d" % (bus, dev), "r+b", buffering=0)
+        # Serialize access to the bus. The MCU status is a one-transfer-delayed
+        # pipeline, so two processes interleaving transfers on the same spidev
+        # each read the other's pipelined reply -> framing looks corrupt and
+        # parse_status() returns None. An exclusive flock makes concurrent
+        # bridge_send.py invocations queue instead of stomping each other.
+        # (Advisory lock: only cooperating openers honour it, which is all we
+        # need since every accessor is this script.)
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
         fcntl.ioctl(self.fd, SPI_IOC_WR_MODE, struct.pack("=B", self.mode))
         fcntl.ioctl(self.fd, SPI_IOC_WR_BITS_PER_WORD, struct.pack("=B", 8))
         fcntl.ioctl(self.fd, SPI_IOC_WR_MAX_SPEED_HZ,
