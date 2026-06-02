@@ -1,0 +1,24 @@
+# Copyright 2024 NXP
+# SPDX-License-Identifier: gpl-2.0-only
+
+manifest:
+
+  group-filter:
+    - +optional
+
+  self:
+    west-commands: scripts/west-commands.yml
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: 7823374e872145b5bd018bfe447839eb36042611 # zephyr v4.1.0
+      import:
+        - name-allowlist:
+          - hal_nxp
+          - cmsis
+          - segger

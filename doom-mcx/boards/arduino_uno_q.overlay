@@ -1,0 +1,25 @@
+/*
+ * DOOM controller-input overlay for the Arduino UNO Q (STM32U585).
+ *
+ * SPI3 runs as an SPI slave (board default pins SCK=PG9 / MISO=PG10 /
+ * MOSI=PB5 / NSS=PG12), driven by the QCS Linux /dev/spidev master that sends
+ * key-state blocks. SPI3 is already `okay` in the board dts, so no node change
+ * is needed here.
+ *
+ * This mirrors the charlieplex SPI bridge wiring so the same on-board
+ * SoC<->STM32 SPI link carries DOOM input. The charlieplex matrix node
+ * (chosen zephyr,display) comes from the board dts and is unaffected.
+ */
+
+/ {
+	/*
+	 * RDY flow-control line: STM32 PG13 == QCM gpiochip1:70. The MCU drives
+	 * it HIGH while it is parked in spi_transceive (ready to clock a block)
+	 * and LOW while it is processing one, so the host only clocks when the
+	 * slave is armed. PG13 is free on this board (not used by SPI3 / display
+	 * / LEDs).
+	 */
+	zephyr,user {
+		rdy-gpios = <&gpiog 13 GPIO_ACTIVE_HIGH>;
+	};
+};
