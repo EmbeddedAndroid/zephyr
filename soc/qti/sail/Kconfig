@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_SAIL
+	help
+	  Qualcomm SA8797P SAIL safety-island Cortex-R52 (ARMv8-R AArch32).

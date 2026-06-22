@@ -1,0 +1,6 @@
+family:
+  - name: qti
+    series:
+      - name: sail
+        socs:
+          - name: sail_r52

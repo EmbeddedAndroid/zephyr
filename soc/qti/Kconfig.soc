@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_FAMILY_QTI
+	bool
+
+config SOC_FAMILY
+	default "qti" if SOC_FAMILY_QTI
+
+rsource "*/Kconfig.soc"

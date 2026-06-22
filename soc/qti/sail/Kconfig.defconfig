@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_SERIES_SAIL
+
+config NUM_IRQS
+	default 480
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 19200000
+
+endif # SOC_SERIES_SAIL
