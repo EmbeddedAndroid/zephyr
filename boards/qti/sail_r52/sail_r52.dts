@@ -1,0 +1,60 @@
+/*
+ * Qualcomm SA8797P SAIL safety-island Cortex-R52 - Zephyr stub board.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The SAIL PBL transfers control to the image at 0x08021000 (the stock
+ * sailhyp.elf ARM A32 exception vector table sits there). We therefore
+ * place the Zephyr image's load/run base (and thus its vector table) at
+ * 0x08021000 by starting the SRAM region there.
+ *
+ * The handshake TCSR shadow regs (0x01F7B014 ...) and the SAIL GENI
+ * console UART are accessed by raw MMIO from the app (Zephyr has no
+ * Qualcomm GENI driver), so they are not modeled as DT devices.
+ */
+
+/dts-v1/;
+
+#include <mem.h>
+#include <arm/armv8-r.dtsi>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	model = "Qualcomm SAIL R52 (Zephyr stub)";
+	compatible = "qti,sail-r52";
+
+	chosen {
+		zephyr,sram = &sram0;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-r52";
+			reg = <0>;
+		};
+	};
+
+	/* SAIL on-chip SRAM, based at the SAIL PBL entry point 0x08021000.
+	 * The Zephyr vector table lands at this base.
+	 */
+	sram0: memory@8021000 {
+		compatible = "mmio-sram";
+		reg = <0x08021000 DT_SIZE_K(1916)>;
+	};
+
+	soc {
+		interrupt-parent = <&gic>;
+
+		gic: interrupt-controller@f1100000 {
+			compatible = "arm,gic-v3", "arm,gic";
+			reg = <0xf1100000 0x10000>,
+			      <0xf1140000 0x100000>;
+			interrupt-controller;
+			#interrupt-cells = <4>;
+			status = "okay";
+		};
+	};
+};

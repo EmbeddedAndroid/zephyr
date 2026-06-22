@@ -1,0 +1,6 @@
+board:
+  name: sail_r52
+  full_name: Qualcomm SA8797P SAIL R52 (Zephyr stub)
+  vendor: qti
+  socs:
+    - name: sail_r52
