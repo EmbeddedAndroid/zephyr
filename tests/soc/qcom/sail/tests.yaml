@@ -29,3 +29,13 @@ tests:
     extra_args: SAIL_TEST_CASE=i2c_profile
   soc.qcom.sail.i2c_boot:
     extra_args: SAIL_TEST_CASE=i2c_boot
+  soc.qcom.sail.pmic:
+    extra_args: SAIL_TEST_CASE=pmic
+  soc.qcom.sail.pmic_boot:
+    extra_args: SAIL_TEST_CASE=pmic_boot
+  soc.qcom.sail.pmic_policy:
+    extra_args: SAIL_TEST_CASE=pmic_policy
+  soc.qcom.sail.post_pmic_clock:
+    extra_args: SAIL_TEST_CASE=post_pmic_clock
+  soc.qcom.sail.board_policy:
+    extra_args: SAIL_TEST_CASE=board_policy

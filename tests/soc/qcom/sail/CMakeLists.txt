@@ -20,6 +20,11 @@ set(test_cases
   i2c
   i2c_profile
   i2c_boot
+  pmic
+  pmic_boot
+  pmic_policy
+  post_pmic_clock
+  board_policy
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -39,6 +44,7 @@ target_compile_definitions(testbinary PRIVATE
 target_sources(testbinary PRIVATE
   main.c
   "models/test_${SAIL_TEST_CASE}.c"
+  "${soc_dir}/monaco/board_policy.c"
   "${soc_dir}/monaco/clock.c"
   "${soc_dir}/monaco/cpu_pll.c"
   "${soc_dir}/monaco/early_clock.c"
@@ -49,5 +55,9 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/md_bist.c"
   "${soc_dir}/monaco/md_publication.c"
   "${soc_dir}/monaco/monaco_policy.c"
+  "${soc_dir}/monaco/pmic.c"
+  "${soc_dir}/monaco/pmic_boot.c"
+  "${soc_dir}/monaco/pmic_policy.c"
+  "${soc_dir}/monaco/post_pmic_clock.c"
   "${soc_dir}/monaco/timer.c"
 )
