@@ -17,6 +17,9 @@ set(test_cases
   md_publication
   monaco_policy
   hbcu
+  i2c
+  i2c_profile
+  i2c_boot
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -40,6 +43,9 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/cpu_pll.c"
   "${soc_dir}/monaco/early_clock.c"
   "${soc_dir}/monaco/hbcu.c"
+  "${soc_dir}/monaco/i2c.c"
+  "${soc_dir}/monaco/i2c_boot.c"
+  "${soc_dir}/monaco/i2c_profile.c"
   "${soc_dir}/monaco/md_bist.c"
   "${soc_dir}/monaco/md_publication.c"
   "${soc_dir}/monaco/monaco_policy.c"

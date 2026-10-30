@@ -23,3 +23,9 @@ tests:
     extra_args: SAIL_TEST_CASE=monaco_policy
   soc.qcom.sail.hbcu:
     extra_args: SAIL_TEST_CASE=hbcu
+  soc.qcom.sail.i2c:
+    extra_args: SAIL_TEST_CASE=i2c
+  soc.qcom.sail.i2c_profile:
+    extra_args: SAIL_TEST_CASE=i2c_profile
+  soc.qcom.sail.i2c_boot:
+    extra_args: SAIL_TEST_CASE=i2c_boot
