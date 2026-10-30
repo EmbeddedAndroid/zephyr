@@ -5458,6 +5458,21 @@ QNX Hypervisor Platforms:
   labels:
     - "platform: QNX Hypervisor"
 
+Qualcomm SAIL Platforms:
+  status: maintained
+  maintainers:
+    - EmbeddedAndroid
+  files:
+    - soc/qcom/CMakeLists.txt
+    - soc/qcom/Kconfig
+    - soc/qcom/Kconfig.defconfig
+    - soc/qcom/Kconfig.soc
+    - soc/qcom/sail/
+    - soc/qcom/soc.yml
+    - tests/soc/qcom/sail/
+  labels:
+    - "platform: Qualcomm"
+
 "Quicklogic Platform":
   status: odd fixes
   files:

@@ -1,0 +1,23 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SAIL_MONACO
+	select ARM
+	select CPU_CORTEX_R52
+	select CPU_HAS_ARM_MPU
+	select CPU_HAS_MPU
+	select GIC_SINGLE_SECURITY_STATE
+	select SOC_EARLY_INIT_HOOK
+	help
+	  Qualcomm Monaco safety island with Cortex-R52 processors.
+
+config SAIL_START_WITHOUT_PCINIT
+	bool "Start applications with PCInit deferred"
+	depends on SOC_SAIL_MONACO
+	select EXPERIMENTAL
+	help
+	  The cold initialization sequence stops before the power sequencer
+	  programs are installed (PCInit), which is not implemented. Select
+	  this to start applications at that point; sail_boot_mode_get() then
+	  returns SAIL_BOOT_PCINIT_DEFERRED. Without it, and after any other
+	  initialization failure, the boot stops before applications start.

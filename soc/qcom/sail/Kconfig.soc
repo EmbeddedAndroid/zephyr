@@ -1,0 +1,16 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_SAIL
+	bool
+
+config SOC_SAIL_MONACO
+	bool
+	select SOC_SERIES_SAIL
+	select SOC_FAMILY_QUALCOMM
+
+config SOC_SERIES
+	default "sail" if SOC_SERIES_SAIL
+
+config SOC
+	default "sail_monaco" if SOC_SAIL_MONACO

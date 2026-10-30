@@ -26,6 +26,7 @@ set(test_cases
   post_pmic_clock
   board_policy
   cold_boot
+  boot_mode
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -34,6 +35,7 @@ endif()
 
 target_include_directories(testbinary PRIVATE
   "${soc_dir}"
+  "${soc_dir}/include"
   "${soc_dir}/monaco"
 )
 
@@ -45,6 +47,7 @@ target_compile_definitions(testbinary PRIVATE
 target_sources(testbinary PRIVATE
   main.c
   "models/test_${SAIL_TEST_CASE}.c"
+  "${soc_dir}/boot_mode.c"
   "${soc_dir}/monaco/board_policy.c"
   "${soc_dir}/monaco/clock.c"
   "${soc_dir}/monaco/cold_boot.c"

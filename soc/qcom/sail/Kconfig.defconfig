@@ -1,0 +1,33 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_SERIES_SAIL
+
+config NUM_IRQS
+	default 1020
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 19200000
+
+config KERNEL_ENTRY
+	default "sail_reset"
+
+configdefault ARM_MPU
+	default y
+
+# Cold initialization runs on the SYS stack before the main thread starts.
+configdefault ARMV7_SYS_STACK_SIZE
+	default 8192
+
+# Cache enablement on SAIL is not supported yet; the port runs with caches off.
+configdefault DCACHE
+	default n
+
+configdefault ICACHE
+	default n
+
+# There is no system timer driver for SAIL.
+configdefault SYS_CLOCK_EXISTS
+	default n
+
+endif

@@ -41,3 +41,5 @@ tests:
     extra_args: SAIL_TEST_CASE=board_policy
   soc.qcom.sail.cold_boot:
     extra_args: SAIL_TEST_CASE=cold_boot
+  soc.qcom.sail.boot_mode:
+    extra_args: SAIL_TEST_CASE=boot_mode

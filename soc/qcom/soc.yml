@@ -1,0 +1,9 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+family:
+  - name: qualcomm
+    series:
+      - name: sail
+        socs:
+          - name: sail_monaco
