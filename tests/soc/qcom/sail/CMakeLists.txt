@@ -25,6 +25,7 @@ set(test_cases
   pmic_policy
   post_pmic_clock
   board_policy
+  cold_boot
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -46,6 +47,7 @@ target_sources(testbinary PRIVATE
   "models/test_${SAIL_TEST_CASE}.c"
   "${soc_dir}/monaco/board_policy.c"
   "${soc_dir}/monaco/clock.c"
+  "${soc_dir}/monaco/cold_boot.c"
   "${soc_dir}/monaco/cpu_pll.c"
   "${soc_dir}/monaco/early_clock.c"
   "${soc_dir}/monaco/hbcu.c"
