@@ -39,7 +39,8 @@ Connections and IOs
 ===================
 
 SAIL has no user-facing connectors or UART on this board. It reaches its
-PMICs through its own I2C controller.
+PMICs through its own I2C controller and receives messages from the
+application processors through the receive mailbox.
 
 Programming and Debugging
 *************************
@@ -80,6 +81,9 @@ Build the Hello World sample with:
    :zephyr-app: samples/hello_world
    :board: ventuno_q_sail/sail_monaco
    :goals: build
+
+The :zephyr:code-sample:`sail-reset-service` sample answers the main
+domain's reset notices, which lets the board reboot under Linux.
 
 References
 **********

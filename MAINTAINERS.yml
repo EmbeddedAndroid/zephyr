@@ -5468,6 +5468,7 @@ Qualcomm SAIL Platforms:
     - drivers/mbox/mbox_qcom_sail_rx.c
     - dts/arm/qcom/sail-monaco.dtsi
     - dts/bindings/mbox/qcom,sail-mbox-rx.yaml
+    - samples/boards/qcom/sail/
     - soc/qcom/CMakeLists.txt
     - soc/qcom/Kconfig
     - soc/qcom/Kconfig.defconfig

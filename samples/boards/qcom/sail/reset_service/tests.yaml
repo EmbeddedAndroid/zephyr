@@ -1,0 +1,15 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+sample:
+  name: SAIL reset service
+  description: Answer the main domain's reset notices on the Qualcomm SAIL
+tests:
+  sample.boards.qcom.sail.reset_service:
+    build_only: true
+    platform_allow:
+      - ventuno_q_sail/sail_monaco
+    integration_platforms:
+      - ventuno_q_sail/sail_monaco
+    tags:
+      - mbox
+      - soc
