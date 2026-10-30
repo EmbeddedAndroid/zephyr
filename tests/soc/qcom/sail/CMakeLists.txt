@@ -13,6 +13,10 @@ set(test_cases
   clock
   cpu_pll
   early_clock
+  md_bist
+  md_publication
+  monaco_policy
+  hbcu
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -35,5 +39,9 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/clock.c"
   "${soc_dir}/monaco/cpu_pll.c"
   "${soc_dir}/monaco/early_clock.c"
+  "${soc_dir}/monaco/hbcu.c"
+  "${soc_dir}/monaco/md_bist.c"
+  "${soc_dir}/monaco/md_publication.c"
+  "${soc_dir}/monaco/monaco_policy.c"
   "${soc_dir}/monaco/timer.c"
 )

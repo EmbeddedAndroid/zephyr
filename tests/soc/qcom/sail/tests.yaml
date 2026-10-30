@@ -15,3 +15,11 @@ tests:
     extra_args: SAIL_TEST_CASE=cpu_pll
   soc.qcom.sail.early_clock:
     extra_args: SAIL_TEST_CASE=early_clock
+  soc.qcom.sail.md_bist:
+    extra_args: SAIL_TEST_CASE=md_bist
+  soc.qcom.sail.md_publication:
+    extra_args: SAIL_TEST_CASE=md_publication
+  soc.qcom.sail.monaco_policy:
+    extra_args: SAIL_TEST_CASE=monaco_policy
+  soc.qcom.sail.hbcu:
+    extra_args: SAIL_TEST_CASE=hbcu

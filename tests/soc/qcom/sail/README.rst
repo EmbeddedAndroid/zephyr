@@ -6,9 +6,11 @@ registers, timer and PMICs, through the same callbacks the hardware
 backend uses. They check the access order, the bounds on every wait, the
 handling of failed accesses and the state left behind after a failure.
 
-The early clock model compares the register accesses of the helpers with
-the expected sequence in ``fixtures/early-clock.trace``. ``R`` (read), ``W``
-(write) and ``B`` lines hold an address and a value in hexadecimal.
+The early clock and main-domain BIST models compare the register accesses
+of the helpers with the expected sequences in ``fixtures/*.trace``. ``R``
+(read), ``W`` (write) and ``B`` lines hold an address and a value in
+hexadecimal; ``D`` (delay in microseconds), ``E`` (BIST event) and ``K``
+(cache invalidation count) lines hold one decimal value.
 
 Run them with::
 
