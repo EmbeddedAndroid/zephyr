@@ -63,8 +63,8 @@ int sail_delay_us(uint32_t value);
  * that may poll or stop the service. All code and data reached from it must be
  * in SRAM.
  *
- * @p retire runs once with local IRQs locked, after a secure reset notice is
- * claimed and before any control, PMIC or answer write. It must not
+ * @p retire runs once with local IRQs locked, after a secure reset or shutdown
+ * notice is claimed and before any control, PMIC or answer write. It must not
  * block, must stop all application use of resources lost in the reset, and
  * must return zero only once that is done. Any failure is terminal. While the
  * service exists, sail_time_us() and sail_delay_us() work only from this
@@ -88,12 +88,14 @@ int sail_reset_service_start(int (*retire)(void *context), void *context);
  * Call only from the thread that started the service. DDR-ready and boot
  * notices are accepted without effect. A secure SDI-disable notice gets
  * 0xaa0c0000. A secure SOC_HR (0xcd070000) notice retires application
- * resources, prepares the reset controls and PMIC, waits 50 ms and then
- * answers 0xaa030000 as four byte stores. The main domain's secure firmware
- * waits up to 1 s for each answer before it drops PS_HOLD. After the reset
- * answer, one SDI-disable notice is answered and reception stops. Any other
- * notice, or a lost or dropped event, is a terminal error and no answer is
- * written.
+ * resources, prepares the reset controls and the PMIC reset policy, waits 50 ms
+ * and answers 0xaa030000 as four byte stores. A secure graceful shutdown
+ * (0xcd060000) notice retires resources, prepares the PMIC for power-off and
+ * answers at once; the reset controls are not touched. The main domain's
+ * secure firmware waits up to 1 s for each answer before it drops PS_HOLD.
+ * After the reset answer, one SDI-disable notice is answered and reception
+ * stops. Any other notice, or a lost or dropped event, is a terminal error and
+ * no answer is written.
  *
  * @retval 0 No queued event.
  * @retval 1 One event handled.

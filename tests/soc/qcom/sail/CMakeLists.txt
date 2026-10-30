@@ -68,6 +68,7 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/pmic_boot.c"
   "${soc_dir}/monaco/pmic_policy.c"
   "${soc_dir}/monaco/pmic_reset.c"
+  "${soc_dir}/monaco/pmic_shutdown.c"
   "${soc_dir}/monaco/pmic_transaction.c"
   "${soc_dir}/monaco/post_pmic_clock.c"
   "${soc_dir}/monaco/timer.c"

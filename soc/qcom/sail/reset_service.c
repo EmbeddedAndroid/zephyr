@@ -223,6 +223,7 @@ static int accept(struct sail_reset_service *s)
 		/* Also sent while the main domain boots; answered in poll. */
 		return event->channel == 1U && !s->status.claimed ? 0 : -EPROTO;
 	case SAIL_MD_COMMAND_SOC_HR:
+	case SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN:
 		if (event->channel != 1U || s->status.claimed) {
 			return -EPERM;
 		}
@@ -320,20 +321,36 @@ int sail_reset_poll(struct sail_reset_service *s)
 		return 1;
 	}
 
-	/* IRQs remain enabled during control preparation, PMIC I/O and delay. */
-	s->status.phase = SAIL_RESET_SERVICE_PREPARING;
-	rc = monaco_reset_prepare(&s->controls, s->entry, &s->status.preparation, live, s);
-	if (rc == 0) {
+	/* IRQs remain enabled throughout PMIC work for either accepted command. */
+	if (s->status.word == UINT32_C(0xcd060000)) {
 		s->status.phase = SAIL_RESET_SERVICE_PMIC;
-		rc = monaco_pmic_transaction_run(&s->transaction, s->boot, eligible, live, s);
-	}
-	s->status.transaction = s->transaction.result;
-	if (rc != 0) {
-		return failed(s, rc);
-	}
-	if (s->status.transaction.phase != MONACO_PMIC_TRANSACTION_DELAYED ||
-	    s->status.transaction.pmic.stage != MONACO_PMIC_RESET_VERIFIED) {
-		return failed(s, -EIO);
+		rc = monaco_pmic_shutdown_transaction_run(&s->transaction, s->boot, eligible, live,
+							  s);
+		s->status.transaction = s->transaction.result;
+		if (rc != 0) {
+			return failed(s, rc);
+		}
+		if (s->status.transaction.phase != MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED ||
+		    s->status.transaction.shutdown.stage != MONACO_PMIC_SHUTDOWN_VERIFIED) {
+			return failed(s, -EIO);
+		}
+	} else {
+		/* IRQs remain enabled during control preparation, PMIC I/O and delay. */
+		s->status.phase = SAIL_RESET_SERVICE_PREPARING;
+		rc = monaco_reset_prepare(&s->controls, s->entry, &s->status.preparation, live, s);
+		if (rc == 0) {
+			s->status.phase = SAIL_RESET_SERVICE_PMIC;
+			rc = monaco_pmic_transaction_run(&s->transaction, s->boot, eligible, live,
+							 s);
+		}
+		s->status.transaction = s->transaction.result;
+		if (rc != 0) {
+			return failed(s, rc);
+		}
+		if (s->status.transaction.phase != MONACO_PMIC_TRANSACTION_DELAYED ||
+		    s->status.transaction.pmic.stage != MONACO_PMIC_RESET_VERIFIED) {
+			return failed(s, -EIO);
+		}
 	}
 
 	key = irq_lock();

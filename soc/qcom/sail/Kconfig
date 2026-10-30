@@ -37,8 +37,9 @@ config SAIL_RESET_SERVICE
 	depends on MBOX_QCOM_SAIL_RX && !USERSPACE
 	select EXPERIMENTAL
 	help
-	  Answer the main domain's reset notice (SOC_HR): prepare the reset
-	  controls and the PMIC, wait 50 ms and send the answer word. The
-	  application starts the coordinator, polls it from one thread and
-	  supplies a callback that retires its own resources before the
-	  reset.
+	  Answer the main domain's reset (SOC_HR) and shutdown notices. For a
+	  reset, prepare the reset controls and the PMIC, wait 50 ms and send
+	  the answer word. For a shutdown the PMIC is prepared for power-off
+	  instead, without the delay. The application starts the coordinator,
+	  polls it from one thread and supplies a callback that retires its
+	  own resources first.

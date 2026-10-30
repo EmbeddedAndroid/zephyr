@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "pmic_reset.h"
+#include "pmic_runtime_internal.h"
 
 static bool sample_ready(const struct monaco_pmic_policy_snapshot *s)
 {
@@ -62,6 +63,15 @@ static bool boot_ready(const struct monaco_pmic *pmic, const struct monaco_pmic_
 		}
 	}
 	return true;
+}
+
+bool monaco_pmic_runtime_ready(const struct monaco_pmic *pmic,
+			       const struct monaco_pmic_policy_snapshot *snapshot,
+			       const struct monaco_pmic_boot_result *boot)
+{
+	return pmic != NULL && snapshot != NULL && boot != NULL && pmic->io.transfer != NULL &&
+	       pmic->io.delay_us != NULL && pmic->transfer_timeout_us != 0 &&
+	       sample_ready(snapshot) && boot_ready(pmic, boot);
 }
 
 struct reset_guard {

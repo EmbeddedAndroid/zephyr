@@ -88,7 +88,7 @@ int monaco_pmic_transaction_run(struct monaco_pmic_transaction *transaction,
 	transaction->boot = boot;
 	result = &transaction->result;
 	result->phase = MONACO_PMIC_TRANSACTION_CLAIMED;
-	lease = (struct transaction_lease){transaction, boot,  boot->pmic, &boot->pmic_boot,
+	lease = (struct transaction_lease){transaction, boot, boot->pmic, &boot->pmic_boot,
 					   admission,   guard, context};
 	if (!eligible(&lease)) {
 		result->error = -EPERM;
@@ -144,5 +144,89 @@ int monaco_pmic_transaction_run(struct monaco_pmic_transaction *transaction,
 		return rc;
 	}
 	result->phase = MONACO_PMIC_TRANSACTION_DELAYED;
+	return 0;
+}
+
+/* Shutdown requires the crash-debug control to be zero; it is never written here. */
+static int shutdown_guarded(void *context)
+{
+	const struct transaction_lease *lease = context;
+	struct monaco_pmic_transaction_result *result = &lease->owner->result;
+	struct monaco_pmic_shutdown_control_result *control = &result->shutdown_control;
+	uint32_t value;
+	int rc;
+
+	rc = guarded(context);
+	if (rc != 0) {
+		return rc;
+	}
+	control->reads_attempted++;
+	control->valid = false;
+	rc = lease->boot->io.read32(lease->boot->io.context, UINT32_C(0xf1149000), &value);
+	control->read_status = rc;
+	if (rc != 0) {
+		result->guard_error = rc < 0 ? rc : -EIO;
+		return result->guard_error;
+	}
+	control->reads_completed++;
+	control->value = value;
+	control->valid = true;
+	/* The read callback may change service state, so check again. */
+	rc = guarded(context);
+	if (rc != 0) {
+		return rc;
+	}
+	if (value != 0U) {
+		result->guard_error = -ESTALE;
+		return result->guard_error;
+	}
+	return 0;
+}
+
+int monaco_pmic_shutdown_transaction_run(struct monaco_pmic_transaction *transaction,
+					 struct monaco_cold_boot *boot,
+					 bool (*admission)(void *context,
+							   const struct monaco_cold_boot *boot),
+					 int (*guard)(void *context), void *context)
+{
+	struct transaction_lease lease;
+	struct monaco_pmic_transaction_result *result;
+	int rc;
+
+	if (transaction == NULL || boot == NULL || admission == NULL || guard == NULL) {
+		return -EINVAL;
+	}
+	if (transaction->claimed) {
+		return -EALREADY;
+	}
+	transaction->claimed = true;
+	transaction->boot = boot;
+	result = &transaction->result;
+	result->phase = MONACO_PMIC_TRANSACTION_CLAIMED;
+	lease = (struct transaction_lease){transaction, boot, boot->pmic, &boot->pmic_boot,
+					   admission,   guard, context};
+	if (!eligible(&lease)) {
+		result->error = -EPERM;
+		return result->error;
+	}
+	rc = shutdown_guarded(&lease);
+	if (rc != 0) {
+		result->error = rc;
+		return rc;
+	}
+	result->phase = MONACO_PMIC_TRANSACTION_CONFIGURING;
+	rc = monaco_pmic_shutdown_configure_guarded(&boot->pmic, &boot->pmic_snapshot,
+						    &boot->pmic_boot, &result->shutdown,
+						    shutdown_guarded, &lease);
+	if (rc != 0) {
+		result->error = rc;
+		return rc;
+	}
+	rc = shutdown_guarded(&lease);
+	if (rc != 0) {
+		result->error = rc;
+		return rc;
+	}
+	result->phase = MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED;
 	return 0;
 }

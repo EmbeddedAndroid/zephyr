@@ -6,7 +6,7 @@
 Overview
 ********
 
-When the main domain of a Qualcomm Monaco SoC reboots, its
+When the main domain of a Qualcomm Monaco SoC reboots or powers off, its
 secure firmware asks SAIL to prepare the reset first and waits for the
 answer. This sample starts the reset coordinator
 (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) and polls it from its main

@@ -7,6 +7,7 @@
 
 #include "cold_boot.h"
 #include "pmic_reset.h"
+#include "pmic_shutdown.h"
 
 enum monaco_pmic_transaction_phase {
 	MONACO_PMIC_TRANSACTION_NEW,
@@ -15,6 +16,16 @@ enum monaco_pmic_transaction_phase {
 	MONACO_PMIC_TRANSACTION_CONFIGURED,
 	MONACO_PMIC_TRANSACTION_DELAYING,
 	MONACO_PMIC_TRANSACTION_DELAYED,
+	MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED,
+};
+
+/** Last read of the crash-debug control at 0xf1149000. */
+struct monaco_pmic_shutdown_control_result {
+	uint32_t reads_attempted;
+	uint32_t reads_completed;
+	uint32_t value;
+	int read_status;
+	bool valid;
 };
 
 struct monaco_pmic_transaction_result {
@@ -27,6 +38,8 @@ struct monaco_pmic_transaction_result {
 	uint64_t before_us;
 	uint64_t after_us;
 	struct monaco_pmic_reset_result pmic;
+	struct monaco_pmic_shutdown_result shutdown;
+	struct monaco_pmic_shutdown_control_result shutdown_control;
 };
 
 struct monaco_pmic_transaction {
@@ -64,5 +77,20 @@ int monaco_pmic_transaction_run(struct monaco_pmic_transaction *transaction,
 				bool (*eligible)(void *context,
 						 const struct monaco_cold_boot *boot),
 				int (*guard)(void *context), void *context);
+
+/**
+ * @brief Program the PMIC for graceful shutdown and verify it.
+ *
+ * Uses the same single-use @p transaction and callback rules as
+ * monaco_pmic_transaction_run(). Lowers EN_DRV, sets C9=00, CB=0a, CC=00
+ * (power off and stay off) and verifies C9/CC; there is no delay. The
+ * crash-debug control at 0xf1149000 must read zero before each transfer and at
+ * completion; a nonzero value fails with -ESTALE and is left unchanged.
+ */
+int monaco_pmic_shutdown_transaction_run(struct monaco_pmic_transaction *transaction,
+					 struct monaco_cold_boot *boot,
+					 bool (*eligible)(void *context,
+							  const struct monaco_cold_boot *boot),
+					 int (*guard)(void *context), void *context);
 
 #endif
