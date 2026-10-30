@@ -1,0 +1,12 @@
+# Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: Apache-2.0
+
+common:
+  tags: cmake
+  type: unit
+tests:
+  buildsystem.unittest.host.default: {}
+  buildsystem.unittest.host.mode0:
+    extra_args: M64_MODE=0
+  buildsystem.unittest.host.mode1:
+    extra_args: M64_MODE=1

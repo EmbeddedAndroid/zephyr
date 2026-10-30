@@ -91,17 +91,16 @@ list(APPEND INCLUDE
   .
 )
 
-if(CMAKE_HOST_APPLE)
-else()
-
-if(M64_MODE)
-set (CMAKE_C_FLAGS "-m64")
-set (CMAKE_CXX_FLAGS "-m64")
-else()
-set (CMAKE_C_FLAGS "-m32") #deprecated on macOS
-set (CMAKE_CXX_FLAGS "-m32") #deprecated on macOS
-endif(M64_MODE)
-
+# Use the native ABI on other hosts, whose compilers may not support -m32/-m64.
+# macOS no longer supports the 32-bit ABI, including on x86 hosts.
+if(NOT CMAKE_HOST_APPLE AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86_64|amd64|AMD64)$")
+  if(M64_MODE)
+    set(CMAKE_C_FLAGS "-m64")
+    set(CMAKE_CXX_FLAGS "-m64")
+  else()
+    set(CMAKE_C_FLAGS "-m32")
+    set(CMAKE_CXX_FLAGS "-m32")
+  endif()
 endif()
 
 target_compile_options(test_interface INTERFACE
