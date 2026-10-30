@@ -5464,13 +5464,17 @@ Qualcomm SAIL Platforms:
     - EmbeddedAndroid
   files:
     - boards/arduino/ventuno_q_sail/
+    - drivers/mbox/Kconfig.qcom_sail
+    - drivers/mbox/mbox_qcom_sail_rx.c
     - dts/arm/qcom/sail-monaco.dtsi
+    - dts/bindings/mbox/qcom,sail-mbox-rx.yaml
     - soc/qcom/CMakeLists.txt
     - soc/qcom/Kconfig
     - soc/qcom/Kconfig.defconfig
     - soc/qcom/Kconfig.soc
     - soc/qcom/sail/
     - soc/qcom/soc.yml
+    - tests/drivers/mbox/qcom_sail/
     - tests/soc/qcom/sail/
   labels:
     - "platform: Qualcomm"

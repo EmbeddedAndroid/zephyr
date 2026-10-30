@@ -1,0 +1,13 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config MBOX_QCOM_SAIL_RX
+	bool "Qualcomm SAIL receive mailbox"
+	default y
+	depends on DT_HAS_QCOM_SAIL_MBOX_RX_ENABLED
+	help
+	  Enable the receive mailbox for the two main-domain doorbells on the
+	  Qualcomm Monaco SAIL. Each doorbell interrupt delivers a 4-byte
+	  message read from the low bytes of four shared status registers.
+	  Both channels stay disabled until a client registers a callback and
+	  enables them. Sending and acknowledging messages are not supported.

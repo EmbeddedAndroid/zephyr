@@ -1,0 +1,32 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Qualcomm Monaco SAIL main-domain doorbell receiver. The SAIL receives two
+  edge-triggered doorbell interrupts from the main domain, one non-secure and
+  one secure. Each doorbell carries four status bytes in the register window,
+  held in the low byte of four consecutive 32-bit status registers that both
+  doorbells share. The bytes form a little-endian 32-bit message.
+
+compatible: "qcom,sail-mbox-rx"
+
+include: [base.yaml, mailbox-controller.yaml]
+
+properties:
+  reg:
+    required: true
+    description: Four consecutive 32-bit status registers.
+
+  interrupts:
+    required: true
+
+  interrupt-names:
+    required: true
+    enum: ["nonsecure", "secure"]
+    description: Non-secure doorbell, then secure doorbell.
+
+  "#mbox-cells":
+    const: 1
+
+mbox-cells:
+  - channel
