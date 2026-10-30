@@ -240,6 +240,7 @@ static bool write_allowed(const struct model *m, uint32_t address)
 	case MONACO_COLD_PMIC_IDENTIFY:
 	case MONACO_COLD_PMIC_PRETARGET:
 	case MONACO_COLD_PMIC_TAIL:
+	case MONACO_COLD_PCINIT:
 		return address == SE + 0x26c || address == SE + 0x270 || address == SE + 0x600 ||
 		       address == SE + 0x604 || address == SE + 0x618 || address == SE + 0x700;
 	default:
