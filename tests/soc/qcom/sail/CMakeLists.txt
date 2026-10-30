@@ -28,6 +28,7 @@ set(test_cases
   cold_boot
   boot_mode
   pmic_reset
+  reset_prepare
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -60,6 +61,7 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/i2c_profile.c"
   "${soc_dir}/monaco/md_bist.c"
   "${soc_dir}/monaco/md_publication.c"
+  "${soc_dir}/monaco/reset_prepare.c"
   "${soc_dir}/monaco/monaco_policy.c"
   "${soc_dir}/monaco/pmic.c"
   "${soc_dir}/monaco/pmic_boot.c"

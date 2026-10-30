@@ -45,3 +45,5 @@ tests:
     extra_args: SAIL_TEST_CASE=boot_mode
   soc.qcom.sail.pmic_reset:
     extra_args: SAIL_TEST_CASE=pmic_reset
+  soc.qcom.sail.reset_prepare:
+    extra_args: SAIL_TEST_CASE=reset_prepare

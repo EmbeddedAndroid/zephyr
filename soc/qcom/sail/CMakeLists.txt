@@ -9,6 +9,7 @@ zephyr_library_sources(
   monaco/timer.c
   monaco/md_bist.c
   monaco/md_publication.c
+  monaco/reset_prepare.c
   monaco/clock.c
   monaco/cpu_pll.c
   monaco/early_clock.c
