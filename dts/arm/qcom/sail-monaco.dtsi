@@ -21,6 +21,16 @@
 	soc {
 		interrupt-parent = <&gic>;
 
+		sail_mbox_rx: mailbox@f03050b4 {
+			compatible = "qcom,sail-mbox-rx";
+			reg = <0xf03050b4 0x10>;
+			interrupts = <GIC_SPI 5 IRQ_TYPE_EDGE 0xa0>,
+				     <GIC_SPI 6 IRQ_TYPE_EDGE 0xa0>;
+			interrupt-names = "nonsecure", "secure";
+			#mbox-cells = <1>;
+			status = "disabled";
+		};
+
 		gic: interrupt-controller@fd200000 {
 			compatible = "arm,gic-v3", "arm,gic";
 			reg = <0xfd200000 0x10000>,

@@ -14,3 +14,7 @@
 		zephyr,sram = &sram0;
 	};
 };
+
+&sail_mbox_rx {
+	status = "okay";
+};
