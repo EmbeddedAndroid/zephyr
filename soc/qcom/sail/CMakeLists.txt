@@ -16,6 +16,7 @@ zephyr_library_sources(
   monaco/pmic.c
   monaco/pmic_boot.c
   monaco/pmic_policy.c
+  monaco/pmic_reset.c
   monaco/post_pmic_clock.c
   monaco/i2c.c
   monaco/i2c_boot.c
