@@ -41,3 +41,8 @@ zephyr_library_sources_ifdef(CONFIG_SAIL_MD_RECEIVE
   md_protocol.c
   md_receive.c
 )
+
+zephyr_library_sources_ifdef(CONFIG_SAIL_RESET_SERVICE
+  reset_service.c
+  monaco/reset_io.c
+)

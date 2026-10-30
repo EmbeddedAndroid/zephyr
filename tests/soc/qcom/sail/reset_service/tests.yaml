@@ -1,0 +1,9 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+tests:
+  soc.qcom.sail.reset_service:
+    type: unit
+    tags:
+      - soc
+      - mbox
+      - qcom

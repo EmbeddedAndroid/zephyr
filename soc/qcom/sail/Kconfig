@@ -30,3 +30,15 @@ config SAIL_MD_RECEIVE
 	  mailbox so that a thread can handle them. The application starts
 	  reception and must be the only user of both channels. The queue
 	  uses irq_lock() for exclusion, so it needs a single CPU.
+
+config SAIL_RESET_SERVICE
+	bool "Main-domain reset coordinator"
+	depends on SAIL_START_WITHOUT_PCINIT && SAIL_MD_RECEIVE
+	depends on MBOX_QCOM_SAIL_RX && !USERSPACE
+	select EXPERIMENTAL
+	help
+	  Answer the main domain's reset notice (SOC_HR): prepare the reset
+	  controls and the PMIC, wait 50 ms and send the answer word. The
+	  application starts the coordinator, polls it from one thread and
+	  supplies a callback that retires its own resources before the
+	  reset.

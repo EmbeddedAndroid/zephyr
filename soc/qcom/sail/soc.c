@@ -9,6 +9,12 @@
 #include "boot_mode.h"
 #include "cold_boot.h"
 #include "native_io.h"
+#if defined(CONFIG_SAIL_RESET_SERVICE)
+#include "reset_service_internal.h"
+#include "monaco/reset_io.h"
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#endif
 
 /* The early hook runs on z_arm_sys_stack, before the main thread exists. */
 _Static_assert(CONFIG_ARMV7_SYS_STACK_SIZE >= 8192,
@@ -18,6 +24,11 @@ _Static_assert(CONFIG_ARMV7_SYS_STACK_SIZE >= 8192,
 static struct monaco_cold_boot boot;
 static int boot_result = MONACO_COLD_STATE;
 static enum sail_boot_mode boot_mode = SAIL_BOOT_STOPPED;
+
+#if defined(CONFIG_SAIL_RESET_SERVICE)
+/* Reset attempt and transport state must live as long as the boot state. */
+static struct sail_reset_service reset_service;
+#endif
 
 void soc_early_init_hook(void)
 {
@@ -31,8 +42,8 @@ void soc_early_init_hook(void)
 		 */
 		.md_access_contract = MD_BIST_ACCESS_PBL_COLD_INHERITED_DEVICE,
 		.md_publication = {
-				.write32 = monaco_native_md_status_write32,
-			},
+			.write32 = monaco_native_md_status_write32,
+		},
 	};
 
 	boot_result = monaco_cold_boot_run(&boot, &io, &monaco_cold_boot_defaults);
@@ -61,7 +72,18 @@ int sail_time_us(uint64_t *value)
 	if (!sail_boot_timer_qualified(&boot, boot_result, boot_mode)) {
 		return boot_result ? boot_result : MONACO_COLD_STATE;
 	}
+#if defined(CONFIG_SAIL_RESET_SERVICE)
+	int rc = sail_reset_timer_enter(&reset_service);
+
+	if (rc != 0) {
+		return rc;
+	}
+	rc = monaco_timer_time_us(&boot.timer, value);
+	sail_reset_timer_leave(&reset_service);
+	return rc;
+#else
 	return monaco_timer_time_us(&boot.timer, value);
+#endif
 }
 
 int sail_delay_us(uint32_t value)
@@ -69,5 +91,44 @@ int sail_delay_us(uint32_t value)
 	if (!sail_boot_timer_qualified(&boot, boot_result, boot_mode)) {
 		return boot_result ? boot_result : MONACO_COLD_STATE;
 	}
+#if defined(CONFIG_SAIL_RESET_SERVICE)
+	int rc = sail_reset_timer_enter(&reset_service);
+
+	if (rc != 0) {
+		return rc;
+	}
+	rc = monaco_timer_delay_us(&boot.timer, value);
+	sail_reset_timer_leave(&reset_service);
+	return rc;
+#else
 	return monaco_timer_delay_us(&boot.timer, value);
+#endif
 }
+
+#if defined(CONFIG_SAIL_RESET_SERVICE)
+/* entry.ld independently binds this symbol to the ELF reset entry. */
+extern void sail_reset(void);
+
+int sail_reset_service_start(int (*retire)(void *context), void *context)
+{
+	static const struct monaco_timer_io controls = {
+		.read32 = monaco_reset_read32,
+		.write32 = monaco_reset_write32,
+	};
+
+	return sail_reset_start(&reset_service, &boot, &boot_result, &boot_mode,
+				DEVICE_DT_GET(DT_NODELABEL(sail_mbox_rx)), &controls,
+				monaco_reset_reply, (uint32_t)(uintptr_t)sail_reset, retire,
+				context);
+}
+
+int sail_reset_service_poll(void)
+{
+	return sail_reset_poll(&reset_service);
+}
+
+int sail_reset_service_stop(void)
+{
+	return sail_reset_stop(&reset_service);
+}
+#endif
