@@ -21,3 +21,12 @@ config SAIL_START_WITHOUT_PCINIT
 	  this to start applications at that point; sail_boot_mode_get() then
 	  returns SAIL_BOOT_PCINIT_DEFERRED. Without it, and after any other
 	  initialization failure, the boot stops before applications start.
+
+config SAIL_MD_RECEIVE
+	bool "Main-domain message queue"
+	depends on SOC_SAIL_MONACO && MBOX && !SMP
+	help
+	  Queue the messages the main domain sends through the SAIL receive
+	  mailbox so that a thread can handle them. The application starts
+	  reception and must be the only user of both channels. The queue
+	  uses irq_lock() for exclusion, so it needs a single CPU.
