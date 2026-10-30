@@ -19,6 +19,7 @@ path = [
     "doc/requirements.txt",
     "scripts/requirements-*.in",
     "scripts/requirements-*.txt",
+    "tests/soc/qcom/sail/fixtures/*.trace",
     # zephyr-keep-sorted-stop
 ]
 SPDX-License-Identifier = "Apache-2.0"

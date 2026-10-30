@@ -1,0 +1,17 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+common:
+  tags:
+    - soc
+    - qcom
+  type: unit
+tests:
+  soc.qcom.sail.timer:
+    extra_args: SAIL_TEST_CASE=timer
+  soc.qcom.sail.clock:
+    extra_args: SAIL_TEST_CASE=clock
+  soc.qcom.sail.cpu_pll:
+    extra_args: SAIL_TEST_CASE=cpu_pll
+  soc.qcom.sail.early_clock:
+    extra_args: SAIL_TEST_CASE=early_clock
