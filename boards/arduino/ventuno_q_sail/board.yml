@@ -1,0 +1,9 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+board:
+  name: ventuno_q_sail
+  full_name: Arduino VENTUNO Q safety island
+  vendor: arduino
+  socs:
+    - name: sail_monaco

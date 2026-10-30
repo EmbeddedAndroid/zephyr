@@ -1,0 +1,14 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+identifier: ventuno_q_sail/sail_monaco
+name: Arduino VENTUNO Q safety island
+arch: arm
+type: mcu
+toolchain:
+  - zephyr
+ram: 879
+vendor: arduino
+testing:
+  only_tags:
+    - soc

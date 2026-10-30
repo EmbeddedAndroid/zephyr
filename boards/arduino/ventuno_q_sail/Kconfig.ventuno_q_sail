@@ -1,0 +1,5 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_VENTUNO_Q_SAIL
+	select SOC_SAIL_MONACO

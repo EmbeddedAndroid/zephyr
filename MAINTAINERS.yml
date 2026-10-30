@@ -5463,6 +5463,7 @@ Qualcomm SAIL Platforms:
   maintainers:
     - EmbeddedAndroid
   files:
+    - boards/arduino/ventuno_q_sail/
     - dts/arm/qcom/sail-monaco.dtsi
     - soc/qcom/CMakeLists.txt
     - soc/qcom/Kconfig

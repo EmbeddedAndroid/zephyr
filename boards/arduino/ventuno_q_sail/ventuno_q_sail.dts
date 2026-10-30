@@ -1,0 +1,16 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <qcom/sail-monaco.dtsi>
+
+/ {
+	compatible = "arduino,ventuno-q-sail";
+	model = "Arduino VENTUNO Q safety island";
+
+	chosen {
+		zephyr,sram = &sram0;
+	};
+};
