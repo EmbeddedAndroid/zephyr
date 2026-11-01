@@ -11,6 +11,10 @@ tests:
     extra_args: SAIL_TEST_CASE=timer
   soc.qcom.sail.clock:
     extra_args: SAIL_TEST_CASE=clock
+  soc.qcom.sail.clock.untrimmed:
+    extra_args:
+      - SAIL_TEST_CASE=clock
+      - SAIL_PLL_UNTRIMMED=1
   soc.qcom.sail.cpu_pll:
     extra_args: SAIL_TEST_CASE=cpu_pll
   soc.qcom.sail.early_clock:

@@ -11,6 +11,14 @@ config SOC_SAIL_MONACO
 	help
 	  Qualcomm Monaco safety island with Cortex-R52 processors.
 
+config SAIL_PLL_FUSE_TRIM
+	bool
+	default y if SOC_SAIL_MONACO
+	help
+	  The SoC fuses carry SAIL PLL5 and PLL6 trim values, which the cold
+	  initialization applies on top of the PLL defaults. Without it the
+	  defaults are programmed and no fuse row is read.
+
 config SAIL_START_WITHOUT_PCINIT
 	bool "Start applications with PCInit deferred"
 	depends on SOC_SAIL_MONACO

@@ -46,6 +46,11 @@ target_compile_definitions(testbinary PRIVATE
   SAIL_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
 )
 
+# Monaco fuses the PLL trims; SAIL_PLL_UNTRIMMED builds the SoCs without them.
+if(NOT SAIL_PLL_UNTRIMMED)
+  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_PLL_FUSE_TRIM=1)
+endif()
+
 
 target_sources(testbinary PRIVATE
   main.c

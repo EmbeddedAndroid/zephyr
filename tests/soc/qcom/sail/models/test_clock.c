@@ -645,16 +645,50 @@ static void se0_clock(void)
 	printf("SE0 clock: %u injected access failures\n", accesses);
 }
 
+/* Without fuse trims the PLLs get their defaults and no trim or fuse row is read. */
+static void pll_untrimmed_profile(void)
+{
+	static const uint32_t fuses[] = {0xf870418c, 0xf8704190, 0xf8704194, 0xf8704198};
+	struct fake f;
+	struct monaco_timer timer;
+
+	for (unsigned int pll = 0; pll < 2; pll++) {
+		const uint32_t base = pll ? PLL6 : PLL5;
+		struct monaco_clock c = prepare(&f, &timer);
+
+		for (unsigned int i = 0; i < ARRAY_SIZE(fuses); i++) {
+			*reg(&f, fuses[i]) = 0xffffffffU;
+		}
+		const int rc = pll ? monaco_clock_pll6_enable(&c) : monaco_clock_pll5_enable(&c);
+
+		sail_check(rc == 0);
+		sail_check(*reg(&f, base + 0x28) == 0x040001ac);
+		sail_check(*reg(&f, base + 0x34) == 0x40100000);
+		sail_check(*reg(&f, base + 0x38) == 0x440001b2);
+		for (unsigned int i = 0; i < f.events; i++) {
+			for (unsigned int j = 0; j < ARRAY_SIZE(fuses); j++) {
+				sail_check(f.log[i].address != fuses[j]);
+			}
+		}
+	}
+}
+
 int sail_model_test(void)
 {
 	complete_allowlist();
 	allowlist_and_invalid();
 	branch_and_rcg();
-	pll_and_parent_order();
-	injected_failures();
-	pll6_profile_and_guards();
-	pll6_limits_and_faults();
 	se0_clock();
-	puts("Monaco clocks: early allowlist, PLL5/6, ordering, guards, bounds and faults passed");
+	if (IS_ENABLED(CONFIG_SAIL_PLL_FUSE_TRIM)) {
+		pll_and_parent_order();
+		injected_failures();
+		pll6_profile_and_guards();
+		pll6_limits_and_faults();
+		puts("Monaco clocks: early allowlist, PLL5/6, ordering, guards, bounds and faults "
+		     "passed");
+	} else {
+		pll_untrimmed_profile();
+		puts("SAIL clocks: early allowlist, untrimmed PLL5/6 and SE0 passed");
+	}
 	return 0;
 }

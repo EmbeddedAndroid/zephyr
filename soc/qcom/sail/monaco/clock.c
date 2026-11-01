@@ -396,11 +396,15 @@ static int pll_enable(struct monaco_clock *clock, const struct pll_profile *prof
 	if ((mode & UINT32_C(0x80001205)) || opmode) {
 		return MONACO_CLOCK_STATE;
 	}
-	rc = read32(clock, profile->trim_address, &trim);
-	if (rc != 0) {
-		return rc;
+	if (IS_ENABLED(CONFIG_SAIL_PLL_FUSE_TRIM)) {
+		rc = read32(clock, profile->trim_address, &trim);
+		if (rc != 0) {
+			return rc;
+		}
+		trim = (trim >> profile->trim_shift) & 0xffffU;
+	} else {
+		trim = 0;
 	}
-	trim = (trim >> profile->trim_shift) & 0xffffU;
 	if (trim) {
 		/* Read the fuse word once, before any PLL write. */
 		rc = read32(clock, profile->fuse_address, &fuse);
