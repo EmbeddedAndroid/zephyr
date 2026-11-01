@@ -1,0 +1,20 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <qcom/sail-lemans.dtsi>
+
+/ {
+	compatible = "qcom,lemans-evk-sail";
+	model = "Qualcomm Lemans EVK safety island";
+
+	chosen {
+		zephyr,sram = &sram0;
+	};
+};
+
+&sail_mbox_rx {
+	status = "okay";
+};

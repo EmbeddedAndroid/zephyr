@@ -1,0 +1,9 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+board:
+  name: lemans_evk_sail
+  full_name: Qualcomm Lemans EVK safety island
+  vendor: qcom
+  socs:
+    - name: sail_lemans
