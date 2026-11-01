@@ -30,6 +30,7 @@ set(test_cases
   pmic_reset
   reset_prepare
   pmic_transaction
+  lemans_prepare
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -40,6 +41,7 @@ target_include_directories(testbinary PRIVATE
   "${soc_dir}"
   "${soc_dir}/include"
   "${soc_dir}/monaco"
+  "${soc_dir}/lemans"
 )
 
 target_compile_definitions(testbinary PRIVATE
@@ -87,4 +89,5 @@ target_sources(testbinary PRIVATE
   "${soc_dir}/monaco/pmic_transaction.c"
   "${soc_dir}/monaco/post_pmic_clock.c"
   "${soc_dir}/monaco/timer.c"
+  "${soc_dir}/lemans/prepare.c"
 )

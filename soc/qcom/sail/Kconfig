@@ -1,13 +1,20 @@
 # Copyright The Zephyr Project Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-config SOC_SAIL_MONACO
+config SOC_SERIES_SAIL
 	select ARM
 	select CPU_CORTEX_R52
 	select CPU_HAS_ARM_MPU
 	select CPU_HAS_MPU
 	select GIC_SINGLE_SECURITY_STATE
 	select SOC_EARLY_INIT_HOOK
+
+config SOC_SAIL_LEMANS
+	help
+	  Qualcomm Lemans safety island with Cortex-R52 processors. The PLLs
+	  run on their defaults, as the SoC fuses no SAIL PLL trims.
+
+config SOC_SAIL_MONACO
 	help
 	  Qualcomm Monaco safety island with Cortex-R52 processors.
 
@@ -21,6 +28,7 @@ config SAIL_PLL_FUSE_TRIM
 
 config SAIL_CPU_PLL1_BOOT_L
 	int
+	default 80 if SOC_SAIL_LEMANS
 	default 83
 	help
 	  L value of the CPU PLL (PLL1) as the boot ROM leaves it running.
@@ -39,7 +47,7 @@ config SAIL_I2C_PMIC
 
 config SAIL_START_WITHOUT_PCINIT
 	bool "Start applications with PCInit deferred"
-	depends on SOC_SAIL_MONACO
+	depends on SOC_SERIES_SAIL
 	select EXPERIMENTAL
 	help
 	  The cold initialization sequence stops before the power sequencer
@@ -50,7 +58,7 @@ config SAIL_START_WITHOUT_PCINIT
 
 config SAIL_MD_RECEIVE
 	bool "Main-domain message queue"
-	depends on SOC_SAIL_MONACO && MBOX && !SMP
+	depends on SOC_SERIES_SAIL && MBOX && !SMP
 	help
 	  Queue the messages the main domain sends through the SAIL receive
 	  mailbox so that a thread can handle them. The application starts
@@ -59,6 +67,7 @@ config SAIL_MD_RECEIVE
 
 config SAIL_RESET_SERVICE
 	bool "Main-domain reset coordinator"
+	depends on SAIL_I2C_PMIC
 	depends on SAIL_START_WITHOUT_PCINIT && SAIL_MD_RECEIVE
 	depends on MBOX_QCOM_SAIL_RX && !USERSPACE
 	select EXPERIMENTAL

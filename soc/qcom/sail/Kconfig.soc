@@ -4,6 +4,11 @@
 config SOC_SERIES_SAIL
 	bool
 
+config SOC_SAIL_LEMANS
+	bool
+	select SOC_SERIES_SAIL
+	select SOC_FAMILY_QUALCOMM
+
 config SOC_SAIL_MONACO
 	bool
 	select SOC_SERIES_SAIL
@@ -13,4 +18,5 @@ config SOC_SERIES
 	default "sail" if SOC_SERIES_SAIL
 
 config SOC
+	default "sail_lemans" if SOC_SAIL_LEMANS
 	default "sail_monaco" if SOC_SAIL_MONACO

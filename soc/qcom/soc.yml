@@ -6,4 +6,5 @@ family:
     series:
       - name: sail
         socs:
+          - name: sail_lemans
           - name: sail_monaco

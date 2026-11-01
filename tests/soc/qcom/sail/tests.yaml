@@ -71,3 +71,5 @@ tests:
     extra_args: SAIL_TEST_CASE=reset_prepare
   soc.qcom.sail.pmic_transaction:
     extra_args: SAIL_TEST_CASE=pmic_transaction
+  soc.qcom.sail.lemans_prepare:
+    extra_args: SAIL_TEST_CASE=lemans_prepare
