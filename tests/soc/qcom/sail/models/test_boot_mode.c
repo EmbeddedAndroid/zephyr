@@ -103,12 +103,63 @@ static void runtime_bist_deferred(void)
 	     "pass");
 }
 
+/* Without a SAIL PMIC a qualified MD BIST and timer allow the deferred start. */
+static void no_i2c_pmic_deferred(void)
+{
+	static struct model model;
+	struct monaco_cold_boot boot;
+
+	prepare(&model, &boot, false);
+	model.with_publication = true;
+	*reg(&model, 0xf0300028) = 0x60190200;
+	const int result = run(&model, &boot);
+	const struct monaco_cold_boot saved = boot;
+
+	sail_check(result == MONACO_COLD_PCINIT_REQUIRED);
+	sail_check(sail_boot_mode_select(&boot, result, false) == SAIL_BOOT_STOPPED);
+	sail_check(sail_boot_mode_select(&boot, result, true) == SAIL_BOOT_PCINIT_DEFERRED);
+	sail_check(sail_boot_timer_qualified(&boot, result, SAIL_BOOT_PCINIT_DEFERRED));
+	sail_check(!sail_boot_timer_qualified(&boot, result, SAIL_BOOT_NORMAL));
+	for (unsigned int mutation = 0; mutation < 5; mutation++) {
+		boot = saved;
+		switch (mutation) {
+		case 0:
+			boot.md_bist_completed = false;
+			break;
+		case 1:
+			boot.md_bist_diagnostic.stage = MD_STAGE_POLICY;
+			break;
+		case 2:
+			boot.timer.initialized = false;
+			break;
+		case 3:
+			boot.stage = MONACO_COLD_MD_BIST;
+			break;
+		case 4:
+			boot.md_publication.events_completed = 4;
+			break;
+		}
+		sail_check(sail_boot_mode_select(&boot, result, true) == SAIL_BOOT_STOPPED);
+		sail_check(!sail_boot_timer_qualified(&boot, result, SAIL_BOOT_PCINIT_DEFERRED));
+	}
+	/* A cold init that stopped before the end never starts applications. */
+	prepare(&model, &boot, false);
+	sail_check(run(&model, &boot) == MONACO_COLD_MD_PUBLICATION_REQUIRED);
+	sail_check(sail_boot_mode_select(&boot, boot.status, true) == SAIL_BOOT_STOPPED);
+	puts("boot mode without a SAIL I2C PMIC: deferred start after the MD BIST and 5 "
+	     "incomplete-state refusals pass");
+}
+
 int sail_model_test(void)
 {
 	struct model model;
 	struct monaco_cold_boot boot;
 
 	load_clocks();
+	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+		no_i2c_pmic_deferred();
+		return 0;
+	}
 	prepare(&model, &boot, true);
 	const int result = run(&model, &boot);
 

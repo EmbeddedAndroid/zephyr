@@ -50,6 +50,10 @@ target_compile_definitions(testbinary PRIVATE
 if(NOT SAIL_PLL_UNTRIMMED)
   target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_PLL_FUSE_TRIM=1)
 endif()
+# VENTUNO Q has a SAIL I2C PMIC; SAIL_NO_I2C_PMIC builds boards without one.
+if(NOT SAIL_NO_I2C_PMIC)
+  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_I2C_PMIC=1)
+endif()
 
 
 target_sources(testbinary PRIVATE

@@ -4,6 +4,7 @@
  */
 #include "boot_mode.h"
 #include "monaco/cold_boot.h"
+#include <zephyr/sys/util.h>
 
 static bool timer_ready(const struct monaco_cold_boot *boot)
 {
@@ -64,6 +65,10 @@ static bool pcinit_deferred_eligible(const struct monaco_cold_boot *boot, int re
 	    boot->status != result || boot->stage != MONACO_COLD_PCINIT || !md_qualified(boot) ||
 	    !timer_ready(boot)) {
 		return false;
+	}
+	/* Without a SAIL PMIC the sequence ends after the main-domain BIST. */
+	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+		return true;
 	}
 	const struct monaco_pmic_boot_result *pmic = &boot->pmic_boot;
 

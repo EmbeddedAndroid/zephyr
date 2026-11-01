@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "cold_boot.h"
+#include <zephyr/sys/util.h>
 
 const struct monaco_cold_boot_limits monaco_cold_boot_defaults = {
 	.timer_read_budget = 16000000,
@@ -199,9 +200,11 @@ static int execute(struct monaco_cold_boot *boot)
 		return rc;
 	}
 	boot->stage = MONACO_COLD_BOARD;
-	rc = monaco_board_prepare(&mmio, MONACO_BOARD_VENTUNO_Q, &boot->board);
-	if (rc != 0) {
-		return rc;
+	if (IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+		rc = monaco_board_prepare(&mmio, MONACO_BOARD_VENTUNO_Q, &boot->board);
+		if (rc != 0) {
+			return rc;
+		}
 	}
 	boot->stage = MONACO_COLD_TIMER;
 	rc = monaco_timer_init(&boot->timer, &mmio, boot->limits.timer_read_budget);
@@ -237,6 +240,11 @@ static int execute(struct monaco_cold_boot *boot)
 		boot->md_bist_skipped = true;
 	} else {
 		return boot->policy_result;
+	}
+	/* HBCU, I2C and PMIC setup only serve the SAIL PMIC. */
+	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+		boot->stage = MONACO_COLD_PCINIT;
+		return MONACO_COLD_PCINIT_REQUIRED;
 	}
 	boot->stage = MONACO_COLD_PARENTS;
 	rc = monaco_board_after_clocks(&mmio, &boot->board, &boot->i2c_qualification,

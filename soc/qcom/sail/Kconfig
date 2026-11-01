@@ -19,6 +19,15 @@ config SAIL_PLL_FUSE_TRIM
 	  initialization applies on top of the PLL defaults. Without it the
 	  defaults are programmed and no fuse row is read.
 
+config SAIL_I2C_PMIC
+	bool
+	default y if SOC_SAIL_MONACO
+	help
+	  SAIL is supplied by its own PMIC on the SAIL I2C bus (VENTUNO Q).
+	  The cold initialization identifies the board, captures the HBCU
+	  results and sets up that PMIC after the main-domain BIST. Without
+	  it the cold initialization ends after the main-domain BIST.
+
 config SAIL_START_WITHOUT_PCINIT
 	bool "Start applications with PCInit deferred"
 	depends on SOC_SAIL_MONACO

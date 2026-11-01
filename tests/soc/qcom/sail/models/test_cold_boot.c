@@ -681,6 +681,51 @@ static void runtime_bist_cases(void)
 	puts("cold boot: conditional runtime BIST, fresh flags, cleanup and failure stops passed");
 }
 
+/*
+ * Without a SAIL I2C PMIC: no board identity, untrimmed PLLs, and the
+ * sequence ends after the main-domain BIST without HBCU, I2C or PMIC
+ * access. A failing BIST still stops it.
+ */
+static void no_i2c_pmic(void)
+{
+	static struct model m;
+	struct monaco_cold_boot boot;
+	static const uint32_t untouched[] = {0xf0146014, 0xf1149024, 0xf870418c, 0xf8704190,
+					     0xf8704194, 0xf8704198};
+	const uint32_t words[] = {0xba010000, 0xba010004, 0xba010002, 0xba010005, 0xba010003};
+
+	for (unsigned int skip = 0; skip < 2; skip++) {
+		prepare(&m, &boot, skip != 0);
+		m.with_publication = true;
+		*reg(&m, 0xf0300028) = 0x60190200;
+		*reg(&m, 0xf0146014) = 0;
+		sail_check(run(&m, &boot) == MONACO_COLD_PCINIT_REQUIRED);
+		sail_check(boot.stage == MONACO_COLD_PCINIT &&
+			   boot.status == MONACO_COLD_PCINIT_REQUIRED);
+		sail_check(boot.board.stage == 0 && boot.board.descriptor == NULL);
+		sail_check(boot.early_clocks.completed_branches == 62);
+		sail_check(skip ? boot.md_bist_skipped
+				: boot.md_bist_completed && !boot.md_bist_result);
+		if (!skip) {
+			sail_check(memcmp(words, m.publication_words, sizeof(words)) == 0);
+		}
+		sail_check(boot.hbcu.mbist.outcome == MONACO_HBCU_UNOBSERVED);
+		sail_check(!m.probes && !m.transactions && boot.i2c_setup.completed_stages == 0);
+		for (unsigned int i = 0; i < m.count; i++) {
+			sail_check(m.trace[i].address < SE || m.trace[i].address >= SE + 0x4000);
+			for (unsigned int j = 0; j < ARRAY_SIZE(untouched); j++) {
+				sail_check(m.trace[i].address != untouched[j]);
+			}
+		}
+	}
+	/* Without a publication writer the BIST cannot run and nothing follows it. */
+	prepare(&m, &boot, false);
+	sail_check(run(&m, &boot) == MONACO_COLD_MD_PUBLICATION_REQUIRED);
+	sail_check(boot.stage == MONACO_COLD_MD_BIST && !boot.md_bist_skipped);
+	puts("cold boot without a SAIL I2C PMIC: ends after the MD BIST, no board, I2C or PMIC "
+	     "access");
+}
+
 int sail_model_test(void)
 {
 	FILE *file = fopen(SAIL_TEST_FIXTURE_DIR "/early-clock.trace", "r");
@@ -695,6 +740,10 @@ int sail_model_test(void)
 		clock_events++;
 	}
 	sail_check(fclose(file) == 0 && clock_events == 81);
+	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+		no_i2c_pmic();
+		return 0;
+	}
 	success_and_faults();
 	refusals();
 	runtime_bist_cases();

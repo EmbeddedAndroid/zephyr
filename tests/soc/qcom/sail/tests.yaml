@@ -45,8 +45,18 @@ tests:
     extra_args: SAIL_TEST_CASE=board_policy
   soc.qcom.sail.cold_boot:
     extra_args: SAIL_TEST_CASE=cold_boot
+  soc.qcom.sail.cold_boot.no_i2c_pmic:
+    extra_args:
+      - SAIL_TEST_CASE=cold_boot
+      - SAIL_PLL_UNTRIMMED=1
+      - SAIL_NO_I2C_PMIC=1
   soc.qcom.sail.boot_mode:
     extra_args: SAIL_TEST_CASE=boot_mode
+  soc.qcom.sail.boot_mode.no_i2c_pmic:
+    extra_args:
+      - SAIL_TEST_CASE=boot_mode
+      - SAIL_PLL_UNTRIMMED=1
+      - SAIL_NO_I2C_PMIC=1
   soc.qcom.sail.pmic_reset:
     extra_args: SAIL_TEST_CASE=pmic_reset
   soc.qcom.sail.reset_prepare:

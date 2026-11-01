@@ -19,6 +19,7 @@ target_include_directories(reset_service_model BEFORE PRIVATE
 target_compile_definitions(reset_service_model PRIVATE
   SAIL_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures"
   CONFIG_SAIL_PLL_FUSE_TRIM=1
+  CONFIG_SAIL_I2C_PMIC=1
 )
 target_sources(reset_service_model PRIVATE
   "${soc_dir}/reset_service.c"
