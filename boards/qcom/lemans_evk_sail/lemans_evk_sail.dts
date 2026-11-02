@@ -12,6 +12,8 @@
 
 	chosen {
 		zephyr,sram = &sram0;
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
 	};
 
 	/* SAIL runs from the main-domain PMICs; it has no PMIC of its own. */
@@ -22,5 +24,9 @@
 };
 
 &sail_mbox_rx {
+	status = "okay";
+};
+
+&uart2 {
 	status = "okay";
 };

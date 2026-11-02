@@ -103,8 +103,20 @@ partition layout of the board's firmware package:
 Debugging
 =========
 
-The console goes to the RAM console, ``ram_console_buf`` in SAIL SRAM. Read
-it with a JTAG debugger that can attach to the Cortex-R52 cores of the SoC.
+By default the console goes to the RAM console, ``ram_console_buf`` in SAIL
+SRAM. Read it with a JTAG debugger that can attach to the Cortex-R52 cores of
+the SoC.
+
+The SAIL UART, serial engine 2 on pads ``SAIL_IO_6`` and ``SAIL_IO_7``, is the
+board's console and shell UART when an application enables
+:kconfig:option:`CONFIG_SERIAL` and :kconfig:option:`CONFIG_UART_CONSOLE`. On
+this board the serial engine has no protocol firmware after the boot ROM, so
+the UART driver has to load one: build with
+:kconfig:option:`CONFIG_UART_QCOM_GENI_SE_FW` and point
+:kconfig:option:`CONFIG_UART_QCOM_GENI_SE_FW_FILE` at a QUP firmware image
+(``qupv3fw.elf`` format) with a UART protocol. The firmware is not part of
+the tree and has to be supplied from outside it. Without it the UART fails to
+initialize and nothing is printed.
 
 Building
 ========
