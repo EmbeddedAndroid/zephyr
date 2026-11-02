@@ -1,0 +1,8 @@
+name: qcom-sail-iq9075-evk
+description: |
+  Adds the Qualcomm IQ-9075 EVK to a SAIL image built for another board,
+  so that the same image also runs on the Lemans safety island.
+boards:
+  ventuno_q_sail/sail_monaco:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: qcom-sail-iq9075-evk.overlay

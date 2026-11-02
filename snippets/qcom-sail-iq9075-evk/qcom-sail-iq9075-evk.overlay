@@ -1,0 +1,12 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Keep in sync with boards/qcom/lemans_evk_sail/lemans_evk_sail.dts. */
+/ {
+	sail-platform-iq9075-evk {
+		compatible = "qcom,sail-platform";
+		qcom,chip-id = <0x6019>;
+	};
+};

@@ -44,6 +44,10 @@ SAIL PMIC and does not start on this board: the main domain's reset and
 shutdown notices are not answered, so a Linux reboot does not restart the
 board.
 
+The :ref:`snippet-qcom-sail-iq9075-evk` snippet adds this board's node to a
+``ventuno_q_sail`` build. The resulting image runs on both boards: the chip
+it finds at cold initialization selects the sequence.
+
 There is no system timer driver: kernel timeouts and sleeps are not
 available.
 
