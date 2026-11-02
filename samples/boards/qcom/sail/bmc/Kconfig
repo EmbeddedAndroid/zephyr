@@ -1,0 +1,8 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config SAMPLE_BMC_LOG_PERIOD_MS
+	int "Status line period at boot in milliseconds (0: off)"
+	default 1000
+
+source "Kconfig.zephyr"

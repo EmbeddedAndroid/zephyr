@@ -1,0 +1,15 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+sample:
+  name: SAIL BMC
+  description: Mock board management controller on the Qualcomm SAIL UART
+tests:
+  sample.boards.qcom.sail.bmc:
+    build_only: true
+    platform_allow:
+      - lemans_evk_sail/sail_lemans
+    integration_platforms:
+      - lemans_evk_sail/sail_lemans
+    tags:
+      - shell
+      - soc
