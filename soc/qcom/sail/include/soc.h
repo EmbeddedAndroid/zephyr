@@ -95,8 +95,11 @@ int sail_reset_service_start(int (*retire)(void *context), void *context);
  * resources, prepares the reset controls and the PMIC reset policy, waits 50 ms
  * and answers 0xaa030000 as four byte stores. A secure graceful shutdown
  * (0xcd060000) notice retires resources, prepares the PMIC for power-off and
- * answers at once; the reset controls are not touched. On a board without a
- * SAIL PMIC both notices retire resources, clear the reset debug enables and
+ * answers at once; the reset controls are not touched. A secure warm reset
+ * (0xcd050000) notice retires resources, sets the PMIC warm reset policy
+ * (C9=01, CB=0a, CC=00, read back) and answers 0xaa070000 at once, as the
+ * stock SAIL firmware does. On a board without a SAIL PMIC all three notices
+ * retire resources, clear the reset debug enables and
  * restore the main-domain PS_HOLD mask if the debug enables are set (both read
  * back), and answer at once; the main domain's PS_HOLD then resets or powers
  * off the board through the main PMIC. The main domain's

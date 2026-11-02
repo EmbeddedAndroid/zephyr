@@ -264,13 +264,21 @@ static int reply(void *ctx, uint32_t answer, uint32_t index)
 		return early_replies == fail_early ? -EFAULT : 0;
 	}
 	sail_check(test_irq_depth && retired && index == replies % 4);
-	sail_check(answer == (replies < 4 ? 0xaa030000 : 0xaa0c0000));
+	sail_check(answer == (replies >= 4			       ? 0xaa0c0000
+			      : service.status.word == 0xcd050000 ? 0xaa070000
+								   : 0xaa030000));
 	trace('A');
 	if (replies >= 4) {
 		sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED &&
 		       service.status.word == 0xcd0a0000);
 	} else if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		sail_check(service.status.reset_debug.valid && !service.transaction.result.phase);
+	} else if (service.status.word == 0xcd050000) {
+		sail_check(service.transaction.result.phase ==
+			   MONACO_PMIC_TRANSACTION_WARM_VERIFIED);
+		sail_check(service.transaction.result.pmic.stage == MONACO_PMIC_RESET_VERIFIED);
+		sail_check(service.transaction.result.time_reads == 0 && writes == 0 &&
+			   delay_first == 0);
 	} else if (service.status.word == 0xcd060000) {
 		sail_check(service.transaction.result.phase ==
 		       MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED);
@@ -398,7 +406,7 @@ uint32_t sys_read32(uintptr_t address)
 void sys_write32(uint32_t value, uintptr_t address)
 {
 	if (address >= 0xf0305094 && address <= 0xf03050a0) {
-		static const uint32_t bytes[8] = {0, 0, 3, 0xaa, 0, 0, 0xc, 0xaa};
+		static const uint32_t bytes[12] = {0, 0, 3, 0xaa, 0, 0, 0xc, 0xaa, 0, 0, 7, 0xaa};
 
 		sail_check(address == 0xf0305094 + (replies % 4) * 4 && value == bytes[replies]);
 		replies++;
@@ -412,6 +420,59 @@ void sys_write32(uint32_t value, uintptr_t address)
 void barrier_dsync_fence_full(void)
 {
 	barriers++;
+}
+/*
+ * Warm reset (0xcd050000): the PMIC warm policy C9=01, CB=0a, CC=00 is written
+ * and read back, then 0xaa070000 is answered at once, as the stock firmware
+ * answers it. The reset controls are not touched.
+ */
+static void warm_tests(void)
+{
+	begin();
+	sail_check(!start());
+	reenter = true;
+	uint32_t transactions = hardware.transactions;
+
+	emit(1, 0xcd050000);
+	sail_check(sail_reset_poll(&service) == 1 && retires == 1 && replies == 4 && writes == 0);
+	sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED);
+	sail_check(order_count == 5 && memcmp(order, "RAAAA", 5) == 0);
+	sail_check(hardware.transactions == transactions + 5 && hardware.pmic[0xc9] == 1 &&
+		   hardware.pmic[0xcb] == 10 && hardware.pmic[0xcc] == 0);
+	sail_check(service.status.reply_completed == 4);
+	no_retry();
+	/* Readback mismatch: no answer. */
+	begin();
+	sail_check(!start());
+	bad_readback = true;
+	emit(1, 0xcd050000);
+	sail_check(sail_reset_poll(&service) == MONACO_PMIC_RESET_VERIFY && !replies);
+	no_retry();
+	/* Armed crash debug is refused before any PMIC access. */
+	begin();
+	*reg(&hardware, 0xf1149000) = 0x47f2;
+	sail_check(!start());
+	transactions = hardware.transactions;
+	emit(1, 0xcd050000);
+	sail_check(sail_reset_poll(&service) == -ESTALE && !replies && !writes);
+	sail_check(hardware.transactions == transactions);
+	no_retry();
+	/* Wrong channel and a failed retirement: no PMIC access, no answer. */
+	begin();
+	sail_check(!start());
+	emit(0, 0xcd050000);
+	sail_check(sail_reset_poll(&service) == -EPERM && !retires && !replies);
+	no_retry();
+	begin();
+	sail_check(!start());
+	retire_error = -ECANCELED;
+	transactions = hardware.transactions;
+	emit(1, 0xcd050000);
+	sail_check(sail_reset_poll(&service) == -ECANCELED && !replies);
+	sail_check(hardware.transactions == transactions);
+	no_retry();
+	printf("PASS: warm reset policy and 0xaa070000 answer; readback, crash-debug, channel "
+	       "and retire refusals\n");
 }
 static void shutdown_begin(void)
 {
@@ -585,7 +646,7 @@ static int lemans_poll(uint32_t word)
  */
 static int lemans_tests(void)
 {
-	static const uint32_t words[] = {0xcd070000, 0xcd060000};
+	static const uint32_t words[] = {0xcd070000, 0xcd060000, 0xcd050000};
 	uint32_t domain = 0;
 
 	for (size_t w = 0; w < ARRAY_SIZE(words); w++) {
@@ -757,9 +818,10 @@ int sail_model_test(void)
 		no_retry();
 	}
 	for (uint32_t bit = 0; bit < 32; bit++) {
-		if (bit == 16U) {
+		/* These exact mutations are the supported CD06 and CD05 opcodes. */
+		if (bit == 16U || bit == 17U) {
 			continue;
-		} /* This exact mutation is the supported CD06 opcode. */
+		}
 		begin();
 		sail_check(!start());
 		emit(1, 0xcd070000 ^ (1U << bit));
@@ -962,6 +1024,7 @@ int sail_model_test(void)
 	sail_check(!sail_reset_stop(&service) && service.status.error == -ECANCELED &&
 	       service.status.cleanup_error == -EIO);
 	shutdown_tests();
+	warm_tests();
 #ifdef SAIL_TEST_SMP
 	/* The worker must be pinned to CPU 0 alone and run there; a refusal leaves no state. */
 	const uint32_t masks[] = {BIT(0) | BIT(1), BIT(1), 0U};
@@ -1000,9 +1063,12 @@ int sail_model_test(void)
 	for (uint32_t i = 0; i < 8; i++) {
 		sail_check(!monaco_reset_reply(NULL, i < 4 ? 0xaa030000 : 0xaa0c0000, i % 4));
 	}
+	for (uint32_t i = 0; i < 4; i++) {
+		sail_check(!monaco_reset_reply(NULL, 0xaa070000, i));
+	}
 	sail_check(monaco_reset_reply(NULL, 0xaa030000, 4) == -EINVAL);
 	sail_check(monaco_reset_reply(NULL, 0xaa010000, 0) == -EINVAL);
-	sail_check(replies == 8 && writes == 4 && barriers == 34);
+	sail_check(replies == 12 && writes == 4 && barriers == 42);
 	printf("PASS: actual coordinator/receive/preparation/CRC-PMIC/timer; %u history "
 	       "boundaries; terminal/context/partial-effect failures; fixed adapters\n",
 	       history_tests);

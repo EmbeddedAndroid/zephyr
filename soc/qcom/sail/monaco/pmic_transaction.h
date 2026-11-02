@@ -17,6 +17,7 @@ enum monaco_pmic_transaction_phase {
 	MONACO_PMIC_TRANSACTION_DELAYING,
 	MONACO_PMIC_TRANSACTION_DELAYED,
 	MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED,
+	MONACO_PMIC_TRANSACTION_WARM_VERIFIED,
 };
 
 /** Last read of the crash-debug control at 0xf1149000. */
@@ -92,5 +93,17 @@ int monaco_pmic_shutdown_transaction_run(struct monaco_pmic_transaction *transac
 					 bool (*eligible)(void *context,
 							  const struct monaco_cold_boot *boot),
 					 int (*guard)(void *context), void *context);
+
+/**
+ * @brief Program the PMIC for a warm reset and verify it.
+ *
+ * Same rules as monaco_pmic_shutdown_transaction_run(). Sets C9=01, CB=0a,
+ * CC=00 and verifies C9/CC; there is no delay.
+ */
+int monaco_pmic_warm_transaction_run(struct monaco_pmic_transaction *transaction,
+				     struct monaco_cold_boot *boot,
+				     bool (*eligible)(void *context,
+						      const struct monaco_cold_boot *boot),
+				     int (*guard)(void *context), void *context);
 
 #endif

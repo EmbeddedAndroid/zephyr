@@ -247,6 +247,7 @@ static int accept(struct sail_reset_service *s)
 		/* Also sent while the main domain boots; answered in poll. */
 		return event->channel == 1U && !s->status.claimed ? 0 : -EPROTO;
 	case SAIL_MD_COMMAND_SOC_HR:
+	case SAIL_MD_COMMAND_WARM_RESET:
 	case SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN:
 		if (event->channel != 1U || s->status.claimed) {
 			return -EPERM;
@@ -273,7 +274,7 @@ static int accept(struct sail_reset_service *s)
  */
 static int answer(struct sail_reset_service *s, uint32_t word)
 {
-	bool reset = word == UINT32_C(0xaa030000);
+	bool reset = word != UINT32_C(0xaa0c0000);
 
 	for (uint32_t i = 0U; i < 4U; i++) {
 		int rc;
@@ -398,6 +399,17 @@ int sail_reset_poll(struct sail_reset_service *s)
 		if (rc != 0) {
 			return failed(s, rc);
 		}
+	} else if (s->status.word == UINT32_C(0xcd050000)) {
+		s->status.phase = SAIL_RESET_SERVICE_PMIC;
+		rc = monaco_pmic_warm_transaction_run(&s->transaction, s->boot, eligible, live, s);
+		s->status.transaction = s->transaction.result;
+		if (rc != 0) {
+			return failed(s, rc);
+		}
+		if (s->status.transaction.phase != MONACO_PMIC_TRANSACTION_WARM_VERIFIED ||
+		    s->status.transaction.pmic.stage != MONACO_PMIC_RESET_VERIFIED) {
+			return failed(s, -EIO);
+		}
 	} else if (s->status.word == UINT32_C(0xcd060000)) {
 		s->status.phase = SAIL_RESET_SERVICE_PMIC;
 		rc = monaco_pmic_shutdown_transaction_run(&s->transaction, s->boot, eligible, live,
@@ -433,7 +445,9 @@ int sail_reset_poll(struct sail_reset_service *s)
 	rc = eligible(s, s->boot) ? history(s) : -ESTALE;
 	if (rc == 0) {
 		s->status.phase = SAIL_RESET_SERVICE_REPLY;
-		rc = answer(s, UINT32_C(0xaa030000));
+		/* The stock firmware answers a warm reset with 0xaa070000. */
+		rc = answer(s, s->status.word == UINT32_C(0xcd050000) ? UINT32_C(0xaa070000)
+								    : UINT32_C(0xaa030000));
 	}
 	if (rc == 0) {
 		/* The MD may follow with its SDI-disable notice; keep receiving for it. */

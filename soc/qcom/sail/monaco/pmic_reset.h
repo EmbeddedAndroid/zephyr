@@ -65,4 +65,14 @@ int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
 						 struct monaco_pmic_reset_result *result,
 						 int (*guard)(void *context), void *guard_context);
 
+/*
+ * As monaco_pmic_reset_configure_readback_guarded(), but programs the warm
+ * reset policy: C9=01, CB=0a, CC=00, then reads back C9 and CC.
+ */
+int monaco_pmic_warm_configure_readback_guarded(struct monaco_pmic *pmic,
+						const struct monaco_pmic_policy_snapshot *snapshot,
+						const struct monaco_pmic_boot_result *boot,
+						struct monaco_pmic_reset_result *result,
+						int (*guard)(void *context), void *guard_context);
+
 #endif

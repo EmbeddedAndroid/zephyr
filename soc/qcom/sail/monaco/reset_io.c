@@ -42,7 +42,8 @@ int monaco_reset_write32(void *context, uint32_t address, uint32_t value)
 int monaco_reset_reply(void *context, uint32_t answer, uint32_t index)
 {
 	ARG_UNUSED(context);
-	if (index >= 4U || (answer != 0xaa030000U && answer != 0xaa0c0000U)) {
+	if (index >= 4U || (answer != 0xaa030000U && answer != 0xaa070000U &&
+			     answer != 0xaa0c0000U)) {
 		return -EINVAL;
 	}
 	/* One byte per 32-bit register, low byte first; no doorbell write follows. */

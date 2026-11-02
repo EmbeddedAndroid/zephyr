@@ -129,11 +129,9 @@ static int read_policy(struct monaco_pmic *pmic, struct monaco_pmic_reset_result
 	return r->status;
 }
 
-int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
-						 const struct monaco_pmic_policy_snapshot *snapshot,
-						 const struct monaco_pmic_boot_result *boot,
-						 struct monaco_pmic_reset_result *r,
-						 int (*check)(void *context), void *guard_context)
+static int configure(struct monaco_pmic *pmic, const struct monaco_pmic_policy_snapshot *snapshot,
+		     const struct monaco_pmic_boot_result *boot, struct monaco_pmic_reset_result *r,
+		     uint8_t c9, uint8_t cc, int (*check)(void *context), void *guard_context)
 {
 	const struct reset_guard guard = {check, guard_context};
 
@@ -153,9 +151,9 @@ int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
 		r->status = MONACO_PMIC_STATE;
 		return r->status;
 	}
-	if (write_policy(pmic, r, MONACO_PMIC_RESET_WRITE_C9, 0xc9, 0x00, &guard) != 0 ||
+	if (write_policy(pmic, r, MONACO_PMIC_RESET_WRITE_C9, 0xc9, c9, &guard) != 0 ||
 	    write_policy(pmic, r, MONACO_PMIC_RESET_WRITE_CB, 0xcb, 0x0a, &guard) != 0 ||
-	    write_policy(pmic, r, MONACO_PMIC_RESET_WRITE_CC, 0xcc, 0x01, &guard) != 0 ||
+	    write_policy(pmic, r, MONACO_PMIC_RESET_WRITE_CC, 0xcc, cc, &guard) != 0 ||
 	    read_policy(pmic, r, MONACO_PMIC_RESET_READ_C9, 0xc9, &r->observed_c9, &r->c9_valid,
 			&guard) != 0 ||
 	    read_policy(pmic, r, MONACO_PMIC_RESET_READ_CC, 0xcc, &r->observed_cc, &r->cc_valid,
@@ -163,7 +161,7 @@ int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
 		return r->status;
 	}
 	r->stage = MONACO_PMIC_RESET_COMPARE;
-	if (r->observed_c9 != 0x00 || r->observed_cc != 0x01) {
+	if (r->observed_c9 != c9 || r->observed_cc != cc) {
 		r->status = MONACO_PMIC_RESET_VERIFY;
 		return r->status;
 	}
@@ -172,6 +170,24 @@ int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
 	}
 	r->stage = MONACO_PMIC_RESET_VERIFIED;
 	return 0;
+}
+
+int monaco_pmic_reset_configure_readback_guarded(struct monaco_pmic *pmic,
+						 const struct monaco_pmic_policy_snapshot *snapshot,
+						 const struct monaco_pmic_boot_result *boot,
+						 struct monaco_pmic_reset_result *result,
+						 int (*guard)(void *context), void *guard_context)
+{
+	return configure(pmic, snapshot, boot, result, 0x00, 0x01, guard, guard_context);
+}
+
+int monaco_pmic_warm_configure_readback_guarded(struct monaco_pmic *pmic,
+						const struct monaco_pmic_policy_snapshot *snapshot,
+						const struct monaco_pmic_boot_result *boot,
+						struct monaco_pmic_reset_result *result,
+						int (*guard)(void *context), void *guard_context)
+{
+	return configure(pmic, snapshot, boot, result, 0x01, 0x00, guard, guard_context);
 }
 
 int monaco_pmic_reset_configure_readback(struct monaco_pmic *pmic,
