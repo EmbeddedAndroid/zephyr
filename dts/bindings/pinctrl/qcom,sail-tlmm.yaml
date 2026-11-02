@@ -1,0 +1,46 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Qualcomm safety island (SAIL) top-level mode multiplexer (TLMM).
+
+  Each child node configures one SAIL pad. The pinmux property holds the
+  pad number and the function select:
+
+    &tlmm {
+            se2_uart_tx: se2_uart_tx {
+                    pinmux = <6 1>;
+                    drive-strength = <4>;
+                    bias-disable;
+            };
+    };
+
+compatible: "qcom,sail-tlmm"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+child-binding:
+  description: SAIL pad configuration.
+
+  include:
+    - name: pincfg-node.yaml
+      property-allowlist:
+        - bias-disable
+        - bias-pull-down
+        - bias-pull-up
+        - drive-strength
+
+  properties:
+    pinmux:
+      required: true
+      type: array
+      description: Pad number and function select.
+
+    drive-strength:
+      enum: [2, 4, 6, 8, 10, 12, 14, 16]
+      default: 2
+      description: Output drive strength in mA.
