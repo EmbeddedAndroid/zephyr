@@ -1,0 +1,10 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config CLOCK_CONTROL_QCOM_SAIL_CC
+	bool "Qualcomm SAIL clock controller driver"
+	default y
+	depends on DT_HAS_QCOM_SAIL_CC_ENABLED
+	help
+	  Enable the driver for the Qualcomm safety island (SAIL) clock
+	  controller: branch clock gating and the serial engine root clocks.

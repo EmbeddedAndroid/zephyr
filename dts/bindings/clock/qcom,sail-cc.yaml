@@ -1,0 +1,30 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Qualcomm safety island (SAIL) clock controller.
+
+  Clock specifiers use the identifiers from
+  include/zephyr/dt-bindings/clock/qcom-sail-cc.h.
+
+compatible: "qcom,sail-cc"
+
+include: [clock-controller.yaml, base.yaml]
+
+properties:
+  reg:
+    required: true
+
+  "#clock-cells":
+    const: 1
+
+  pll0-out-main-frequency:
+    type: int
+    default: 600000000
+    description: |
+      Rate of the PLL0 main output in Hz, as set up by the cold boot. Used as
+      the second clock source of the serial engine root clocks; the XO is
+      tried first.
+
+clock-cells:
+  - id

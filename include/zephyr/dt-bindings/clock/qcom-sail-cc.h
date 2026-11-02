@@ -1,0 +1,18 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+#ifndef ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_QCOM_SAIL_CC_H_
+#define ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_QCOM_SAIL_CC_H_
+
+#define SAIL_CC_QUPV3_WRAP0_M_AHB_CLK   0
+#define SAIL_CC_QUPV3_WRAP0_S_AHB_CLK   1
+#define SAIL_CC_QUPV3_WRAP0_CORE_CLK    2
+#define SAIL_CC_QUPV3_WRAP0_CORE_2X_CLK 3
+#define SAIL_CC_QUPV3_WRAP0_S0_CLK      4
+#define SAIL_CC_QUPV3_WRAP0_S1_CLK      5
+#define SAIL_CC_QUPV3_WRAP0_S2_CLK      6
+#define SAIL_CC_QUPV3_WRAP0_S3_CLK      7
+#define SAIL_CC_QUPV3_WRAP0_S4_CLK      8
+
+#endif
