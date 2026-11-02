@@ -7,7 +7,7 @@ config SOC_SERIES_SAIL
 	select CPU_HAS_ARM_MPU
 	select CPU_HAS_MPU
 	select GIC_SINGLE_SECURITY_STATE
-	select SOC_EARLY_INIT_HOOK
+	select SOC_EARLY_INIT_HOOK if !SAIL_SECONDARY_CLUSTER
 
 config SOC_SAIL_LEMANS
 	help
@@ -16,6 +16,14 @@ config SOC_SAIL_LEMANS
 config SOC_SAIL_MONACO
 	help
 	  Qualcomm Monaco safety island with Cortex-R52 processors.
+
+config SAIL_ENTRY_ADDRESS
+	hex
+	depends on SOC_SERIES_SAIL
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_SRAM))
+	help
+	  Image entry vector, at the start of the image SRAM. The boot ROM and
+	  the core release both start cores here.
 
 config SAIL_START_WITHOUT_PCINIT
 	bool "Start applications with PCInit deferred"
@@ -52,3 +60,23 @@ config SAIL_RESET_SERVICE
 	  own resources first. Under SMP that thread must be pinned to CPU 0
 	  before it starts. On a board without a SAIL PMIC the coordinator
 	  does not start.
+
+config SAIL_SECONDARY_CLUSTER
+	bool "Image for processor cluster 1"
+	depends on SOC_SERIES_SAIL && SMP
+	help
+	  Build an image for cluster 1, which has its own interrupt controller
+	  and runs next to the cluster-0 image. It has no cold initialization
+	  and no main-domain services. The cluster-0 image starts its first
+	  core; it starts its second core when the fuses allow it.
+
+config SAIL_SECONDARY_CLUSTER_ENTRY
+	hex "Cluster-1 image entry address"
+	depends on SOC_SERIES_SAIL && SMP && !SAIL_SECONDARY_CLUSTER
+	default 0x0
+	help
+	  Entry of the cluster-1 image loaded with this image. When not zero
+	  and an entry vector is found there, the kernel starts cluster 1 at
+	  this address after the cold initialization. Zero leaves cluster 1
+	  in reset.
+

@@ -125,5 +125,25 @@ int sail_reset_service_poll(void);
  */
 int sail_reset_service_stop(void);
 
+#if defined(CONFIG_SMP)
+/**
+ * @brief Report how a core was started at boot.
+ *
+ * The image starts the second core of its own cluster when the fuses do not
+ * pair it into lockstep, and the cluster-0 image starts cluster 1 when a
+ * cluster-1 image is loaded at CONFIG_SAIL_SECONDARY_CLUSTER_ENTRY.
+ *
+ * @param cluster Cluster index, 0 or 1.
+ * @param cpu Core index in the cluster, 0 or 1.
+ * @retval 0 The core was started (or is the running image's first core).
+ * @retval -EINPROGRESS This image has not started, and does not start, the core.
+ * @retval -ENODEV The core is the checker of a lockstep pair.
+ * @retval -ENOENT No cluster-1 image is loaded at its entry.
+ * @retval -EINVAL Bad core index.
+ * @return Other negative values are release errors.
+ */
+int sail_core_status(uint32_t cluster, uint32_t cpu);
+#endif
+
 #endif
 #endif

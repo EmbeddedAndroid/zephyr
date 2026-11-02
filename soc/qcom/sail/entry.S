@@ -14,6 +14,13 @@
 #define CNTHCTL_EL1PCTEN_EL1PCEN	3
 #define PWRSEQ_WDOG_CTL		0xf1000404
 
+/* MPIDR of the image's first core: cluster 0 core 0, or cluster 1 core 0. */
+#if defined(CONFIG_SAIL_SECONDARY_CLUSTER)
+#define ENTRY_MPIDR		0x100
+#else
+#define ENTRY_MPIDR		0
+#endif
+
 	.syntax unified
 	.arm
 	.section .sail_entry, "ax"
@@ -37,8 +44,16 @@ sail_reset:
 	isb
 	mrc p15, 0, r1, c0, c0, 5
 	ubfx r1, r1, #0, #24
-	cmp r1, #0
+#if defined(CONFIG_SMP)
+	/* Every core of this image's cluster continues; any other core parks. */
+	mov r4, r1
+	lsr r2, r1, #8
+	cmp r2, #(ENTRY_MPIDR >> 8)
 	bne .Lpark
+#else
+	cmp r1, #ENTRY_MPIDR
+	bne .Lpark
+#endif
 
 	/* Same value in SCTLR: nTWI and nTWE (bits 16, 18) set, so WFI and WFE
 	 * are not trapped; the other bits set are RES1. MPU, alignment check and
@@ -68,15 +83,28 @@ sail_reset:
 	mrc p15, 4, r1, c12, c9, 5
 	orr r1, r1, #(ICC_SRE_ELx_SRE_BIT | ICC_SRE_ELx_EN_BIT)
 	mcr p15, 4, r1, c12, c9, 5
+#if defined(CONFIG_SMP)
+	/* CNTVOFF resets to an unknown value; the kernel needs one virtual count. */
+	mov r1, #0
+	mcrr p15, 4, r1, r1, c14
+#endif
 	dsb sy
 	isb
 
+#if defined(CONFIG_SAIL_SECONDARY_CLUSTER)
+	b z_arm_reset
+#else
+#if defined(CONFIG_SMP)
+	cmp r4, #ENTRY_MPIDR
+	bne z_arm_reset
+#endif
 	/* The power sequencer watchdog is not used by this firmware. */
 	ldr r1, =PWRSEQ_WDOG_CTL
 	mov r2, #0
 	str r2, [r1]
 	dsb sy
 	b z_arm_reset
+#endif
 .Lpark:
 	dsb sy
 	wfi

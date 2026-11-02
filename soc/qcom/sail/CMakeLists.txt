@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 zephyr_library()
-zephyr_library_sources(
-  entry.S
+zephyr_library_sources(entry.S)
+
+# The cluster-1 image has no cold initialization.
+zephyr_library_sources_ifndef(CONFIG_SAIL_SECONDARY_CLUSTER
   soc.c
   boot_mode.c
   chip.c
@@ -40,6 +42,12 @@ zephyr_linker_sources(ROM_START SORT_KEY 0x000sail entry.ld)
 set(SOC_LINKER_SCRIPT
   "${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_a_r/scripts/linker.ld"
   CACHE INTERNAL ""
+)
+
+zephyr_library_sources_ifdef(CONFIG_SMP
+  cores.c
+  cores_native.c
+  smp.c
 )
 
 zephyr_library_sources_ifdef(CONFIG_SAIL_MD_RECEIVE

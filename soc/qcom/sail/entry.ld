@@ -4,4 +4,4 @@
  */
 
 KEEP(*(.sail_entry))
-ASSERT(ABSOLUTE(sail_reset) == 0x0801d400, "SAIL entry must be at 0x0801d400");
+ASSERT(ABSOLUTE(sail_reset) == CONFIG_SAIL_ENTRY_ADDRESS, "SAIL entry must start the image SRAM");

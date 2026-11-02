@@ -26,8 +26,13 @@ configdefault DCACHE
 configdefault ICACHE
 	default n
 
-# There is no system timer driver for SAIL.
+# Single-core images run without a system timer; multi-core images use the
+# per-core generic timer.
 configdefault SYS_CLOCK_EXISTS
-	default n
+	default n if !SMP
+
+# Secondary cores are released through pm_cpu_on() in the SoC code.
+configdefault PM_CPU_OPS
+	default y if SMP
 
 endif
