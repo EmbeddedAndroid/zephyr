@@ -8,6 +8,7 @@ tests:
     build_only: true
     platform_allow:
       - ventuno_q_sail/sail_monaco
+      - ventuno_q_sail/sail_monaco/smp
     integration_platforms:
       - ventuno_q_sail/sail_monaco
     tags:

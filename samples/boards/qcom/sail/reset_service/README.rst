@@ -10,7 +10,9 @@ When the main domain of a Qualcomm Monaco SoC reboots or powers off, its
 secure firmware asks SAIL to prepare the reset first and waits for the
 answer. This sample starts the reset coordinator
 (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) and polls it from its main
-thread. Its retire callback has nothing to release.
+thread. In an SMP build (the ``ventuno_q_sail/sail_monaco/smp`` variant) it
+polls from a thread pinned to CPU 0 instead, as the coordinator requires.
+Its retire callback has nothing to release.
 
 Building
 ********
