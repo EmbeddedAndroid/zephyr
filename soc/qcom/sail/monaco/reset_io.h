@@ -11,5 +11,6 @@
 int monaco_reset_read32(void *context, uint32_t address, uint32_t *value);
 int monaco_reset_write32(void *context, uint32_t address, uint32_t value);
 int monaco_reset_reply(void *context, uint32_t answer, uint32_t index);
+int monaco_reset_publish(void *context, uint32_t word, uint32_t index);
 
 #endif

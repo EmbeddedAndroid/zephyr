@@ -140,6 +140,55 @@ int sail_reset_service_poll(void);
  */
 int sail_reset_service_stop(void);
 
+/** A main-domain notice the reset coordinator consumed. */
+struct sail_reset_service_notice {
+	/** Count of notices consumed so far, this one included. */
+	uint64_t sequence;
+	/** Notice word as the main domain wrote it. */
+	uint32_t word;
+	/** Receive channel: 0 non-secure, 1 secure. */
+	uint32_t channel;
+};
+
+/**
+ * @brief Return the last notice the coordinator consumed.
+ *
+ * Call only from the thread that started the service. Each poll that returns
+ * a non-zero value has consumed one notice; the sequence tells repeated reads
+ * of the same notice apart. The notice is reported whether or not the
+ * coordinator accepted it, also after the service stopped.
+ *
+ * @param notice Filled with the notice.
+ * @retval 0 @p notice holds the last consumed notice.
+ * @retval -ENOMSG No notice consumed yet.
+ * @retval -EINVAL @p notice is NULL, or the service was never started.
+ * @retval -EWOULDBLOCK Caller is in an ISR or has IRQs masked.
+ * @retval -EPERM Caller is not the starting thread.
+ * @retval -EBUSY A call is already active.
+ */
+int sail_reset_service_notice_get(struct sail_reset_service_notice *notice);
+
+/**
+ * @brief Publish a word in the SAIL-to-main-domain answer registers.
+ *
+ * Lets the main domain read an image identifier or state from the registers
+ * that carry the coordinator's answers, written the same way (four byte
+ * stores, low byte first, no doorbell). Call only from the thread that
+ * started the service, while it listens and before any reset or shutdown
+ * notice is claimed. The next answer overwrites the word; publishing over an
+ * answer the main domain is still waiting for (it polls up to 1 s) loses
+ * that answer, so the caller must leave a margin after one.
+ *
+ * @param word Word to publish; not zero and not 0xaaXXXXXX, the answer form.
+ * @retval 0 Published.
+ * @retval -EINVAL Bad word, or the service was never started.
+ * @retval -EPERM The service is not listening, a notice was claimed, or the
+ *	   caller is not the starting thread.
+ * @retval -EWOULDBLOCK Caller is in an ISR or has IRQs masked.
+ * @retval -EBUSY A call is already active.
+ */
+int sail_reset_service_publish(uint32_t word);
+
 #if defined(CONFIG_SMP)
 /**
  * @brief Report how a core was started at boot.
