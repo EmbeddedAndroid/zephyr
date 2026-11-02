@@ -37,9 +37,13 @@ size_t bmc_sensors_read(struct bmc_sensor *out, size_t max)
 		uint32_t valid = 0U;
 
 		for (uint8_t s = 0U; s < controllers[c].sensors; s++) {
-			uint32_t v = sys_read32(controllers[c].tm + SN_STATUS(s));
-			int32_t deci = sign_extend(FIELD_GET(SN_LAST_TEMP, v), 11);
+			uint32_t v;
+			int32_t deci;
 
+			if (bmc_read32(controllers[c].tm + SN_STATUS(s), &v) != 0) {
+				continue;
+			}
+			deci = sign_extend(FIELD_GET(SN_LAST_TEMP, v), 11);
 			if ((v & SN_VALID) != 0U) {
 				valid++;
 				hottest = MAX(hottest, deci);

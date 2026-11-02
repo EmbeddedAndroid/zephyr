@@ -43,10 +43,15 @@ struct bmc_md_status {
 	uint32_t wdt_fired;
 	uint32_t resets_requested;
 	int last_reset_result;
+	uint32_t dropped;
+	bool retired;
 };
 
 const char *bmc_md_state_name(enum bmc_md_state state);
-int bmc_md_start(void);
+void bmc_md_start(void);
+void bmc_md_notice(uint32_t word, uint32_t channel);
+void bmc_md_retire(void);
+int bmc_read32(uint32_t sail_addr, uint32_t *value);
 void bmc_md_status_get(struct bmc_md_status *status);
 size_t bmc_md_history(struct bmc_notice *out, size_t max);
 void bmc_md_heartbeat_set(uint32_t addr);
@@ -71,6 +76,9 @@ const char *bmc_build_id(void);
 void bmc_out(const char *fmt, ...);
 bool bmc_readable(uint32_t sail_addr);
 bool bmc_log_local(void);
+int bmc_platform_start(void);
+int bmc_platform_status(void);
+uint32_t bmc_image_word(void);
 void bmc_log_set_local(bool local);
 
 #endif

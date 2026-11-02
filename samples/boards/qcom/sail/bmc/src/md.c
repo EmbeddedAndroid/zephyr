@@ -4,28 +4,24 @@
  */
 
 /*
- * Main-domain (MD) monitor: records the MD notices SAIL receives, tracks a
- * heartbeat word that software on the MD advances, and in watchdog mode
- * reports (and optionally resets) an MD whose heartbeat stops.
+ * Main-domain (MD) monitor: records the MD notices the platform thread hands
+ * over, tracks a heartbeat word that software on the MD advances, and in
+ * watchdog mode reports (and optionally resets) an MD whose heartbeat stops.
  */
 
 #include <errno.h>
 #include <string.h>
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/arch/cpu.h>
 #include "md_protocol.h"
-#include "md_receive.h"
 #include "bmc.h"
 
 #define MD_POLL_MS 10
 #define HB_POLL_MS 100
 /* MD physical addresses are reached from SAIL at MD + 0xc0000000. */
 #define MD_ALIAS   0xc0000000U
+#define SAIL_LOCAL 0xf0000000U
 
 /*
  * Blocks SAIL has read on the IQ-9075 EVK without a fault. Others, including
@@ -55,7 +51,56 @@ bool bmc_readable(uint32_t sail_addr)
 	return false;
 }
 
-static struct sail_md_receive receiver;
+struct notice_msg {
+	uint64_t at_ms;
+	uint32_t word;
+	uint32_t channel;
+};
+
+K_MSGQ_DEFINE(notice_queue, sizeof(struct notice_msg), BMC_NOTICE_HISTORY, 8);
+static atomic_t dropped;
+
+/* MD reads stop for good once a reset or shutdown is claimed: the MD may be gone. */
+static struct k_spinlock io_lock;
+static bool md_gone;
+
+int bmc_read32(uint32_t sail_addr, uint32_t *value)
+{
+	k_spinlock_key_t key;
+	int rc = 0;
+
+	if (sail_addr >= SAIL_LOCAL) {
+		*value = sys_read32(sail_addr);
+		return 0;
+	}
+	key = k_spin_lock(&io_lock);
+	if (md_gone) {
+		rc = -ESHUTDOWN;
+	} else {
+		*value = sys_read32(sail_addr);
+	}
+	k_spin_unlock(&io_lock, key);
+	return rc;
+}
+
+/* Called by the coordinator with its lock held: must not block. */
+void bmc_md_retire(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&io_lock);
+
+	md_gone = true;
+	k_spin_unlock(&io_lock, key);
+}
+
+void bmc_md_notice(uint32_t word, uint32_t channel)
+{
+	struct notice_msg m = {.at_ms = bmc_uptime_ms(), .word = word, .channel = channel};
+
+	if (k_msgq_put(&notice_queue, &m, K_NO_WAIT) != 0) {
+		atomic_inc(&dropped);
+	}
+}
+
 static struct k_spinlock lock;
 static struct bmc_md_status st;
 static struct bmc_notice history[BMC_NOTICE_HISTORY];
@@ -101,10 +146,10 @@ static enum bmc_md_state state_after(enum bmc_md_state cur, enum sail_md_command
 	}
 }
 
-static void record_notice(const struct sail_md_receive_event *ev)
+static void record_notice(const struct notice_msg *ev)
 {
-	uint32_t word = sys_get_le32(ev->bytes);
-	uint64_t now = bmc_uptime_ms();
+	uint32_t word = ev->word;
+	uint64_t now = ev->at_ms;
 	enum sail_md_command cmd = sail_md_command_decode(word);
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
@@ -129,9 +174,9 @@ static void heartbeat_poll(uint64_t now)
 	uint32_t timeout_s = 0U, age_ms = 0U;
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
-	if (st.hb_configured) {
-		uint32_t v = sys_read32(st.hb_addr + MD_ALIAS);
+	uint32_t v;
 
+	if (st.hb_configured && bmc_read32(st.hb_addr + MD_ALIAS, &v) == 0) {
 		if (v != st.hb_value) {
 			st.hb_value = v;
 			st.hb_changed_ms = now;
@@ -166,7 +211,7 @@ static void heartbeat_poll(uint64_t now)
 
 static void md_thread(void *a, void *b, void *c)
 {
-	struct sail_md_receive_event ev;
+	struct notice_msg ev;
 	uint32_t ticks = 0U;
 
 	ARG_UNUSED(a);
@@ -174,7 +219,7 @@ static void md_thread(void *a, void *b, void *c)
 	ARG_UNUSED(c);
 
 	for (;;) {
-		while (sail_md_receive_get(&receiver, &ev) == 0) {
+		while (k_msgq_get(&notice_queue, &ev, K_NO_WAIT) == 0) {
 			record_notice(&ev);
 		}
 		if (++ticks >= HB_POLL_MS / MD_POLL_MS) {
@@ -188,17 +233,11 @@ static void md_thread(void *a, void *b, void *c)
 K_THREAD_STACK_DEFINE(md_stack, 2048);
 static struct k_thread md_tid;
 
-int bmc_md_start(void)
+void bmc_md_start(void)
 {
-	int rc = sail_md_receive_init(&receiver, DEVICE_DT_GET(DT_NODELABEL(sail_mbox_rx)));
-
-	if (rc == 0) {
-		rc = sail_md_receive_start(&receiver);
-	}
 	k_thread_create(&md_tid, md_stack, K_THREAD_STACK_SIZEOF(md_stack), md_thread, NULL,
 			NULL, NULL, K_PRIO_PREEMPT(2), 0, K_NO_WAIT);
 	k_thread_name_set(&md_tid, "md");
-	return rc;
 }
 
 void bmc_md_status_get(struct bmc_md_status *out)
@@ -207,6 +246,10 @@ void bmc_md_status_get(struct bmc_md_status *out)
 
 	*out = st;
 	k_spin_unlock(&lock, key);
+	out->dropped = (uint32_t)atomic_get(&dropped);
+	key = k_spin_lock(&io_lock);
+	out->retired = md_gone;
+	k_spin_unlock(&io_lock, key);
 }
 
 size_t bmc_md_history(struct bmc_notice *out, size_t max)
@@ -232,8 +275,8 @@ void bmc_md_heartbeat_set(uint32_t addr)
 	st.hb_changes = 0U;
 	st.hb_changed_ms = bmc_uptime_ms();
 	st.wdt_armed = false;
-	if (st.hb_configured) {
-		st.hb_value = sys_read32(addr + MD_ALIAS);
+	if (st.hb_configured && bmc_read32(addr + MD_ALIAS, &st.hb_value) != 0) {
+		st.hb_value = 0U;
 	}
 	k_spin_unlock(&lock, key);
 }

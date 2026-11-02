@@ -28,6 +28,22 @@ into a small board management controller with a shell on the SAIL UART:
 Asynchronous lines (status, notices, watchdog) are printed through the shell,
 which redraws the prompt after them.
 
+Platform thread
+***************
+
+A platform thread runs the SoC's main-domain reset coordinator
+(:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`), so the MD's reboot, warm reset
+and power-off notices are answered as with the ``reset_service`` sample. It
+hands every notice the coordinator consumes to the MD monitor, which is how
+``md status`` sees them. Once a reset or shutdown notice is claimed, the
+sample stops reading MD registers (heartbeat, sensors, ``peek``), as the MD
+may be gone.
+
+Built with ``-DBMC_IMAGE_ID=<24-bit value>``, the platform thread also
+publishes that value in the SAIL-to-MD answer registers after XBL's boot
+success notice, and again 12 s after each SDI-disable answer, so software on
+the MD can tell which image runs. ``md status`` shows the coordinator result.
+
 Heartbeat from Linux
 ********************
 

@@ -46,6 +46,8 @@ static int cmd_md_status(const struct shell *sh, size_t argc, char **argv)
 	shell_print(sh, "uptime_ms=%llu md=%s notices=%u last=0x%08x last_age_ms=%llu", now,
 		    bmc_md_state_name(md.state), md.notices, md.last_word,
 		    md.notices != 0U ? now - md.last_notice_ms : 0U);
+	shell_print(sh, "coordinator rc=%d md_access=%s dropped=%u", bmc_platform_status(),
+		    md.retired ? "retired" : "on", md.dropped);
 	if (md.hb_configured) {
 		shell_print(sh, "heartbeat addr=0x%08x value=0x%08x changes=%u age_ms=%llu",
 			    md.hb_addr, md.hb_value, md.hb_changes, now - md.hb_changed_ms);
@@ -197,7 +199,14 @@ static int cmd_peek(const struct shell *sh, size_t argc, char **argv)
 		}
 	}
 	for (uint32_t i = 0U; i < count; i++) {
-		shell_print(sh, "0x%08x: 0x%08x", addr + 4U * i, sys_read32(addr + 4U * i));
+		uint32_t v;
+		int rc = bmc_read32(addr + 4U * i, &v);
+
+		if (rc != 0) {
+			shell_error(sh, "0x%08x: main domain reset or off (%d)", addr + 4U * i, rc);
+			return rc;
+		}
+		shell_print(sh, "0x%08x: 0x%08x", addr + 4U * i, v);
 	}
 	return 0;
 }

@@ -16,12 +16,23 @@
 #define BMC_BUILD_ID "unversioned"
 #endif
 
+/* Image identifier the MD can read from the answer registers; 0 publishes nothing. */
+#ifndef BMC_IMAGE_ID
+#define BMC_IMAGE_ID 0
+#endif
+BUILD_ASSERT((BMC_IMAGE_ID >> 24) == 0, "BMC_IMAGE_ID must fit in 24 bits");
+
 static atomic_t log_period_ms;
 static atomic_t log_local;
 
 const char *bmc_build_id(void)
 {
 	return BMC_BUILD_ID;
+}
+
+uint32_t bmc_image_word(void)
+{
+	return BMC_IMAGE_ID;
 }
 
 uint64_t bmc_uptime_ms(void)
@@ -110,8 +121,9 @@ int main(void)
 
 	printk("\nSAIL BMC %s boot_mode=0x%x boot_status=%d\n", bmc_build_id(),
 	       (unsigned int)sail_boot_mode_get(), sail_boot_status());
-	rc = bmc_md_start();
-	printk("SAIL BMC md receiver rc=%d\n", rc);
+	bmc_md_start();
+	rc = bmc_platform_start();
+	printk("SAIL BMC platform rc=%d\n", rc);
 	bmc_log_set(CONFIG_SAMPLE_BMC_LOG_PERIOD_MS);
 
 	for (;;) {
