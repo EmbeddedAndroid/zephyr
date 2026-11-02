@@ -61,12 +61,17 @@ static bool eligible(void *context, const struct monaco_cold_boot *boot)
 {
 	const struct sail_reset_service *s = context;
 
-	return s->boot == boot && s->boot_result != NULL && s->boot_mode != NULL &&
-	       *s->boot_mode == SAIL_BOOT_PCINIT_DEFERRED &&
-	       *s->boot_result == MONACO_COLD_PCINIT_REQUIRED &&
-	       sail_boot_timer_qualified(boot, *s->boot_result, *s->boot_mode) &&
-	       boot->i2c.initialized && !boot->i2c.busy && boot->i2c.timer == &boot->timer &&
-	       boot->pmic.io.context == boot;
+	if (s->boot != boot || s->boot_result == NULL || s->boot_mode == NULL ||
+	    *s->boot_mode != SAIL_BOOT_PCINIT_DEFERRED ||
+	    *s->boot_result != MONACO_COLD_PCINIT_REQUIRED ||
+	    !sail_boot_timer_qualified(boot, *s->boot_result, *s->boot_mode)) {
+		return false;
+	}
+	if (!s->pmic) {
+		return !monaco_cold_boot_has_pmic(boot);
+	}
+	return monaco_cold_boot_has_pmic(boot) && boot->i2c.initialized && !boot->i2c.busy &&
+	       boot->i2c.timer == &boot->timer && boot->pmic.io.context == boot;
 }
 
 /* Caller holds the service lock. RX callbacks have finished before this snapshot. */
@@ -181,10 +186,7 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 	s->entry = entry;
 	s->retire = retire;
 	s->context = context;
-	if (!monaco_cold_boot_has_pmic(boot)) {
-		k_spin_unlock(&s->lock, key);
-		return failed(s, -ENODEV);
-	}
+	s->pmic = monaco_cold_boot_has_pmic(boot);
 	if (entry != 0x0801d400U || !eligible(s, boot)) {
 		k_spin_unlock(&s->lock, key);
 		return failed(s, -EPERM);
@@ -287,6 +289,52 @@ static int answer(struct sail_reset_service *s, uint32_t word)
 	return 0;
 }
 
+/*
+ * Without a SAIL PMIC the main domain's PS_HOLD drop does the reset or
+ * power-off. An armed reset debug control would turn it into a debug reset,
+ * so it is cleared and the main-domain PS_HOLD mask restored first.
+ */
+static int disarm_reset_debug(struct sail_reset_service *s)
+{
+	struct sail_reset_debug_result *d = &s->status.reset_debug;
+	const struct monaco_timer_io *io = &s->controls;
+	int rc = live(s);
+
+	if (rc == 0) {
+		d->reads++;
+		rc = io->read32(io->context, SAIL_RESET_DEBUG_ENABLE, &d->before);
+	}
+	if (rc != 0) {
+		return rc < 0 ? rc : -EIO;
+	}
+	d->valid = true;
+	rc = live(s);
+	if (rc != 0 || d->before == 0U) {
+		return rc;
+	}
+	d->writes++;
+	rc = io->write32(io->context, SAIL_RESET_DEBUG_ENABLE, 0U);
+	if (rc == 0) {
+		d->writes++;
+		rc = io->write32(io->context, SAIL_MD_PS_HOLD_MASK, SAIL_MD_PS_HOLD_MASK_DEFAULT);
+	}
+	if (rc == 0) {
+		d->reads++;
+		rc = io->read32(io->context, SAIL_RESET_DEBUG_ENABLE, &d->after);
+	}
+	if (rc == 0) {
+		d->reads++;
+		rc = io->read32(io->context, SAIL_MD_PS_HOLD_MASK, &d->mask_after);
+	}
+	if (rc != 0) {
+		return rc < 0 ? rc : -EIO;
+	}
+	if (d->after != 0U || (d->mask_after & 0xffffU) != SAIL_MD_PS_HOLD_MASK_DEFAULT) {
+		return -EIO;
+	}
+	return live(s);
+}
+
 int sail_reset_poll(struct sail_reset_service *s)
 {
 	k_spinlock_key_t key;
@@ -344,7 +392,13 @@ int sail_reset_poll(struct sail_reset_service *s)
 	}
 
 	/* IRQs remain enabled throughout PMIC work for either accepted command. */
-	if (s->status.word == UINT32_C(0xcd060000)) {
+	if (!s->pmic) {
+		s->status.phase = SAIL_RESET_SERVICE_PREPARING;
+		rc = disarm_reset_debug(s);
+		if (rc != 0) {
+			return failed(s, rc);
+		}
+	} else if (s->status.word == UINT32_C(0xcd060000)) {
 		s->status.phase = SAIL_RESET_SERVICE_PMIC;
 		rc = monaco_pmic_shutdown_transaction_run(&s->transaction, s->boot, eligible, live,
 							  s);

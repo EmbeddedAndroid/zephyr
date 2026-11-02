@@ -58,8 +58,9 @@ config SAIL_RESET_SERVICE
 	  instead, without the delay. The application starts the coordinator,
 	  polls it from one thread and supplies a callback that retires its
 	  own resources first. Under SMP that thread must be pinned to CPU 0
-	  before it starts. On a board without a SAIL PMIC the coordinator
-	  does not start.
+	  before it starts. On a board without a SAIL PMIC both notices are
+	  answered at once, after clearing any armed reset debug enables;
+	  the main domain's PS_HOLD then acts through the main PMIC.
 
 config SAIL_SECONDARY_CLUSTER
 	bool "Image for processor cluster 1"

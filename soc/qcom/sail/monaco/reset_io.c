@@ -15,7 +15,8 @@ int monaco_reset_read32(void *context, uint32_t address, uint32_t *value)
 {
 	ARG_UNUSED(context);
 	if (value == NULL || (address != 0xf1149024U && address != 0xf1149020U &&
-			      address != 0xf1149420U && address != 0xf0300044U)) {
+			      address != 0xf1149420U && address != 0xf0300044U &&
+			      address != 0xf1149000U)) {
 		return -EINVAL;
 	}
 	barrier_dsync_fence_full();
@@ -27,8 +28,9 @@ int monaco_reset_read32(void *context, uint32_t address, uint32_t *value)
 int monaco_reset_write32(void *context, uint32_t address, uint32_t value)
 {
 	ARG_UNUSED(context);
-	if (!((address == 0xf1149420U && value == 0x0000cff8U) ||
-	      (address == 0xf0300044U && value == 0x00400ea0U))) {
+	if (!((address == 0xf1149420U && (value == 0x0000cff8U || value == 0x0000ffffU)) ||
+	      (address == 0xf0300044U && value == 0x00400ea0U) ||
+	      (address == 0xf1149000U && value == 0U))) {
 		return -EPERM;
 	}
 	barrier_dsync_fence_full();

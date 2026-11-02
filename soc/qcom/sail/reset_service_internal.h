@@ -24,6 +24,7 @@ struct sail_reset_service {
 	void *context;
 	k_tid_t worker;
 	uint32_t entry;
+	bool pmic;
 	bool attempted;
 	bool busy;
 	bool active;

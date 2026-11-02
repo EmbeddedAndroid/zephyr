@@ -58,7 +58,8 @@ int sail_delay_us(uint32_t value);
  * @brief Start the reset coordinator on the calling thread.
  *
  * Valid once per boot, only in boot mode SAIL_BOOT_PCINIT_DEFERRED. The caller
- * must own both receive channels, the PMIC, I2C and reset controls exclusively,
+ * must own both receive channels, the PMIC, I2C and reset controls exclusively
+ * (on a board without a SAIL PMIC: the receive channels and reset controls),
  * and must have set up IRQ routing. The calling thread becomes the only thread
  * that may poll or stop the service. Under SMP that thread must be pinned to
  * CPU 0 only (k_thread_cpu_pin() before it starts). All code and data reached
@@ -79,7 +80,6 @@ int sail_delay_us(uint32_t value);
  * @retval -EALREADY Start was already attempted.
  * @retval -EWOULDBLOCK Caller is in an ISR or has IRQs masked.
  * @retval -EBUSY A timer call is in progress.
- * @retval -ENODEV The board has no SAIL PMIC.
  * @retval -EPERM The boot state is not eligible, or under SMP the caller is
  *	   not pinned to CPU 0.
  * @return Other negative values are receiver errors.
@@ -95,7 +95,11 @@ int sail_reset_service_start(int (*retire)(void *context), void *context);
  * resources, prepares the reset controls and the PMIC reset policy, waits 50 ms
  * and answers 0xaa030000 as four byte stores. A secure graceful shutdown
  * (0xcd060000) notice retires resources, prepares the PMIC for power-off and
- * answers at once; the reset controls are not touched. The main domain's
+ * answers at once; the reset controls are not touched. On a board without a
+ * SAIL PMIC both notices retire resources, clear the reset debug enables and
+ * restore the main-domain PS_HOLD mask if the debug enables are set (both read
+ * back), and answer at once; the main domain's PS_HOLD then resets or powers
+ * off the board through the main PMIC. The main domain's
  * secure firmware waits up to 1 s for each answer before it drops PS_HOLD.
  * After the reset answer, one SDI-disable notice is answered and reception
  * stops. Any other notice, or a lost or dropped event, is a terminal error and

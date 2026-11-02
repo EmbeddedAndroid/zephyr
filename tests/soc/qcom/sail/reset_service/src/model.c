@@ -244,7 +244,12 @@ static int controls_write(void *ctx, uint32_t a, uint32_t v)
 	boundary();
 	writes++;
 	trace('C');
-	sail_check((a == 0xf1149420 && v == 0xcff8) || (a == 0xf0300044 && v == 0x00400ea0));
+	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+		sail_check((a == 0xf1149000 && v == 0) || (a == 0xf1149420 && v == 0xffff));
+	} else {
+		sail_check((a == 0xf1149420 && v == 0xcff8) ||
+			   (a == 0xf0300044 && v == 0x00400ea0));
+	}
 	*reg(&hardware, a) = v;
 	return writes == fail_write ? -EFAULT : 0; /* failure after the modeled effect */
 }
@@ -264,6 +269,8 @@ static int reply(void *ctx, uint32_t answer, uint32_t index)
 	if (replies >= 4) {
 		sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED &&
 		       service.status.word == 0xcd0a0000);
+	} else if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+		sail_check(service.status.reset_debug.valid && !service.transaction.result.phase);
 	} else if (service.status.word == 0xcd060000) {
 		sail_check(service.transaction.result.phase ==
 		       MONACO_PMIC_TRANSACTION_SHUTDOWN_VERIFIED);
@@ -316,6 +323,12 @@ static void begin(void)
 	test_cpu.id = 0U;
 #endif
 	prepare(&hardware, &boot, true);
+	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+		*reg(&hardware, 0xf0300028) = 0x60190200;
+		*reg(&hardware, 0xf0146014) = 0;
+		*reg(&hardware, 0xf013f000) = 0x5;
+		*reg(&hardware, 0xf0142000) = 0;
+	}
 	const struct monaco_cold_boot_io io = {.context = &hardware,
 					       .read32 = observed_read,
 					       .write32 = observed_write,
@@ -346,6 +359,7 @@ static void begin(void)
 	*reg(&hardware, 0xf1149020) = 0x1002;
 	*reg(&hardware, 0xf1149420) = 0xffff;
 	*reg(&hardware, 0xf0300044) = 0;
+	*reg(&hardware, 0xf1149000) = 0;
 	active = true;
 }
 static int start(void)
@@ -378,7 +392,7 @@ static void no_retry(void)
 uint32_t sys_read32(uintptr_t address)
 {
 	sail_check(address == 0xf1149024 || address == 0xf1149020 || address == 0xf1149420 ||
-	       address == 0xf0300044);
+	       address == 0xf0300044 || address == 0xf1149000);
 	return 0x12345678;
 }
 void sys_write32(uint32_t value, uintptr_t address)
@@ -389,8 +403,9 @@ void sys_write32(uint32_t value, uintptr_t address)
 		sail_check(address == 0xf0305094 + (replies % 4) * 4 && value == bytes[replies]);
 		replies++;
 	} else {
-		sail_check((address == 0xf1149420 && value == 0xcff8) ||
-		       (address == 0xf0300044 && value == 0x00400ea0));
+		sail_check((address == 0xf1149420 && (value == 0xcff8 || value == 0xffff)) ||
+		       (address == 0xf0300044 && value == 0x00400ea0) ||
+		       (address == 0xf1149000 && value == 0));
 		writes++;
 	}
 }
@@ -557,6 +572,106 @@ static void shutdown_tests(void)
 	       "preservation/feedback/ownership/terminal ACK gates\n",
 	       domain);
 }
+static int lemans_poll(uint32_t word)
+{
+	emit(1, word);
+	return sail_reset_poll(&service);
+}
+
+/*
+ * IQ-9075 EVK (no SAIL PMIC): a reset or shutdown notice retires the
+ * application, clears an armed reset debug control and answers at once, with
+ * no I2C or PMIC access. Every fault or lost message ends without an answer.
+ */
+static int lemans_tests(void)
+{
+	static const uint32_t words[] = {0xcd070000, 0xcd060000};
+	uint32_t domain = 0;
+
+	for (size_t w = 0; w < ARRAY_SIZE(words); w++) {
+		begin();
+		sail_check(!monaco_cold_boot_has_pmic(&boot) && !start());
+		emit(0, 0xcc010000);
+		sail_check(sail_reset_poll(&service) == 1);
+		emit(0, 0xcb000003);
+		sail_check(sail_reset_poll(&service) == 1);
+		uint32_t count = hardware.count, transactions = hardware.transactions;
+
+		reenter = true;
+		sail_check(lemans_poll(words[w]) == 1);
+		sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED && retires == 1 &&
+			   replies == 4 && writes == 0 && control_reads == 1);
+		sail_check(order_count == 5 && memcmp(order, "RAAAA", 5) == 0);
+		sail_check(service.status.reset_debug.before == 0 &&
+			   service.status.reset_debug.reads == 1 &&
+			   service.status.reset_debug.writes == 0);
+		sail_check(hardware.count == count && hardware.transactions == transactions);
+		no_retry();
+	}
+	/* Armed crash debug: cleared and the mask restored, both read back. */
+	for (size_t w = 0; w < ARRAY_SIZE(words); w++) {
+		begin();
+		*reg(&hardware, 0xf1149000) = 0x47f2;
+		*reg(&hardware, 0xf1149420) = 0xcff8;
+		sail_check(!start());
+		sail_check(lemans_poll(words[w]) == 1 && replies == 4 && writes == 2);
+		sail_check(order_count == 7 && memcmp(order, "RCCAAAA", 7) == 0);
+		sail_check(*reg(&hardware, 0xf1149000) == 0 &&
+			   *reg(&hardware, 0xf1149420) == 0xffff);
+		sail_check(service.status.reset_debug.before == 0x47f2 &&
+			   service.status.reset_debug.reads == 3 &&
+			   service.status.reset_debug.writes == 2);
+		domain = io_count;
+		no_retry();
+	}
+	/* Each control read and write fails once; no answer follows. */
+	for (uint32_t i = 1; i <= 3; i++) {
+		begin();
+		*reg(&hardware, 0xf1149000) = 0x47f2;
+		sail_check(!start());
+		fail_read = i;
+		sail_check(lemans_poll(0xcd070000) == -EFAULT && !replies);
+		no_retry();
+	}
+	for (uint32_t i = 1; i <= 2; i++) {
+		begin();
+		*reg(&hardware, 0xf1149000) = 0x47f2;
+		sail_check(!start());
+		fail_write = i;
+		sail_check(lemans_poll(0xcd070000) == -EFAULT && !replies && writes == i);
+		no_retry();
+	}
+	begin();
+	*reg(&hardware, 0xf1149000) = 0x47f2;
+	sail_check(!start());
+	wrong_control = true;
+	sail_check(lemans_poll(0xcd070000) == -EIO && !replies);
+	no_retry();
+	begin();
+	sail_check(!start());
+	retire_error = -ECANCELED;
+	sail_check(lemans_poll(0xcd060000) == -ECANCELED && !control_reads && !replies);
+	begin();
+	sail_check(!start());
+	emit(0, 0xcd070000);
+	sail_check(sail_reset_poll(&service) == -EPERM && !retires && !replies);
+	/* A message lost at any boundary of the answer path prevents the answer. */
+	for (uint32_t i = 1; i <= domain; i++) {
+		begin();
+		*reg(&hardware, 0xf1149000) = 0x47f2;
+		sail_check(!start());
+		inject_at = i;
+		sail_check(lemans_poll(0xcd070000) < 0 && !replies);
+	}
+	begin();
+	mode = SAIL_BOOT_NORMAL;
+	sail_check(start() == -EPERM && mbox_calls == 0);
+	printf("PASS: no SAIL PMIC: reset and shutdown answers, crash-debug disarm, 5 control "
+	       "faults, readback mismatch, %u history boundaries\n",
+	       domain);
+	return 0;
+}
+
 int sail_model_test(void)
 {
 	FILE *file = fopen(SAIL_TEST_FIXTURE_DIR "/early-clock.trace", "r");
@@ -568,6 +683,9 @@ int sail_model_test(void)
 		sail_check(fscanf(file, " %c %x %x", &e->kind, &e->address, &e->value) == 3);
 	}
 	sail_check(!fclose(file));
+	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+		return lemans_tests();
+	}
 	begin();
 	sail_check(!start());
 	sail_check(sail_reset_poll(&service) == 0);
@@ -866,22 +984,25 @@ int sail_model_test(void)
 	/* Native allowlist, store widths and barriers; bus success is modeled. */
 	replies = writes = barriers = 0;
 	uint32_t value;
-	const uint32_t addresses[] = {0xf1149024, 0xf1149020, 0xf1149420, 0xf0300044};
+	const uint32_t addresses[] = {0xf1149024, 0xf1149020, 0xf1149420, 0xf0300044, 0xf1149000};
 
-	for (size_t i = 0; i < 4; i++) {
+	for (size_t i = 0; i < ARRAY_SIZE(addresses); i++) {
 		sail_check(!monaco_reset_read32(NULL, addresses[i], &value) && value == 0x12345678);
 	}
 	sail_check(monaco_reset_read32(NULL, 0xf1000404, &value) == -EINVAL);
 	sail_check(!monaco_reset_write32(NULL, 0xf1149420, 0xcff8));
 	sail_check(!monaco_reset_write32(NULL, 0xf0300044, 0x00400ea0));
-	sail_check(monaco_reset_write32(NULL, 0xf1149420, 0xffff) == -EPERM);
+	sail_check(!monaco_reset_write32(NULL, 0xf1149420, 0xffff));
+	sail_check(!monaco_reset_write32(NULL, 0xf1149000, 0));
+	sail_check(monaco_reset_write32(NULL, 0xf1149420, 0) == -EPERM);
+	sail_check(monaco_reset_write32(NULL, 0xf1149000, 0x200) == -EPERM);
 	sail_check(monaco_reset_write32(NULL, 0xf0305094, 0) == -EPERM);
 	for (uint32_t i = 0; i < 8; i++) {
 		sail_check(!monaco_reset_reply(NULL, i < 4 ? 0xaa030000 : 0xaa0c0000, i % 4));
 	}
 	sail_check(monaco_reset_reply(NULL, 0xaa030000, 4) == -EINVAL);
 	sail_check(monaco_reset_reply(NULL, 0xaa010000, 0) == -EINVAL);
-	sail_check(replies == 8 && writes == 2 && barriers == 28);
+	sail_check(replies == 8 && writes == 4 && barriers == 34);
 	printf("PASS: actual coordinator/receive/preparation/CRC-PMIC/timer; %u history "
 	       "boundaries; terminal/context/partial-effect failures; fixed adapters\n",
 	       history_tests);
