@@ -1,0 +1,28 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config UART_QCOM_GENI
+	bool "Qualcomm GENI UART driver"
+	default y
+	depends on DT_HAS_QCOM_GENI_UART_ENABLED
+	select SERIAL_HAS_DRIVER
+	select PINCTRL
+	select CLOCK_CONTROL
+	help
+	  Enable the polled UART driver for Qualcomm GENI serial engines.
+
+config UART_QCOM_GENI_SE_FW
+	bool "Load UART firmware into serial engines without firmware"
+	depends on UART_QCOM_GENI
+	help
+	  Build a QUP serial engine firmware image into the driver and load
+	  its UART protocol firmware when a serial engine reports no
+	  firmware at initialization. Without this option such a serial
+	  engine fails to initialize.
+
+config UART_QCOM_GENI_SE_FW_FILE
+	string "QUP serial engine firmware image"
+	depends on UART_QCOM_GENI_SE_FW
+	help
+	  Path of the QUP firmware ELF image (the qupv3fw.elf format loaded
+	  by Linux), absolute or relative to the application directory.

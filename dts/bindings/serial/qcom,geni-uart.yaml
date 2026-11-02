@@ -1,0 +1,32 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Qualcomm GENI serial engine in UART mode. The node is a child of a
+  qcom,geni-se-qup wrapper node, whose clocks are enabled with it.
+
+compatible: "qcom,geni-uart"
+
+include: [uart-controller.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  clocks:
+    required: true
+    description: Serial engine clock.
+
+  clock-frequency:
+    type: int
+    default: 7372800
+    description: Serial engine clock rate in Hz requested from the clock controller.
+
+  current-speed:
+    required: true
+
+  pinctrl-0:
+    required: true
+
+  pinctrl-names:
+    required: true

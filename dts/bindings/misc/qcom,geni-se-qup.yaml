@@ -1,0 +1,18 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Qualcomm QUP wrapper holding GENI serial engines. The reg property is the
+  wrapper common register block; the clocks are the wrapper clocks that
+  every serial engine needs.
+
+compatible: "qcom,geni-se-qup"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  clocks:
+    required: true
