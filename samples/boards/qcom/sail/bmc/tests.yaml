@@ -13,3 +13,13 @@ tests:
     tags:
       - shell
       - soc
+  sample.boards.qcom.sail.bmc.auto:
+    build_only: true
+    extra_args: SNIPPET=qcom-sail-iq9075-evk
+    platform_allow:
+      - ventuno_q_sail/sail_monaco/smp
+    integration_platforms:
+      - ventuno_q_sail/sail_monaco/smp
+    tags:
+      - shell
+      - soc

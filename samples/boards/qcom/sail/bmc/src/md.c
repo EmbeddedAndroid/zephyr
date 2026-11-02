@@ -14,6 +14,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
 #include <zephyr/arch/cpu.h>
+#include <soc.h>
 #include "md_protocol.h"
 #include "bmc.h"
 
@@ -24,10 +25,13 @@
 #define SAIL_LOCAL 0xf0000000U
 
 /*
- * Blocks SAIL has read on the IQ-9075 EVK without a fault. Others, including
- * the main-domain TLMM, APSS watchdog and MPM, and parts of SAILSS_PWR_CTRL,
- * take a synchronous external abort, which halts SAIL.
+ * Blocks SAIL has read on Lemans (IQ-9075 EVK) without a fault. Others,
+ * including the main-domain TLMM, APSS watchdog and MPM, and parts of
+ * SAILSS_PWR_CTRL, take a synchronous external abort, which halts SAIL. No
+ * block is listed for other chips.
  */
+#define CHIP_LEMANS 0x6019U
+
 static const struct {
 	uint32_t start, end;
 } readable[] = {
@@ -43,6 +47,9 @@ static const struct {
 
 bool bmc_readable(uint32_t sail_addr)
 {
+	if (sail_chip_id_get() != CHIP_LEMANS) {
+		return false;
+	}
 	for (size_t i = 0; i < ARRAY_SIZE(readable); i++) {
 		if (sail_addr >= readable[i].start && sail_addr < readable[i].end) {
 			return true;

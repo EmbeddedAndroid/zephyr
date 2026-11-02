@@ -28,8 +28,8 @@ static int cmd_version(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
-	shell_print(sh, "SAIL BMC %s boot_mode=0x%x boot_status=%d", bmc_build_id(),
-		    (unsigned int)sail_boot_mode_get(), sail_boot_status());
+	shell_print(sh, "SAIL BMC %s chip=0x%04x boot_mode=0x%x boot_status=%d", bmc_build_id(),
+		    sail_chip_id_get(), (unsigned int)sail_boot_mode_get(), sail_boot_status());
 	return 0;
 }
 
@@ -141,6 +141,9 @@ static int cmd_sensors(const struct shell *sh, size_t argc, char **argv)
 
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
+	if (n == 0U) {
+		shell_print(sh, "no sensors described for chip 0x%04x", sail_chip_id_get());
+	}
 	for (size_t i = 0; i < n; i++) {
 		if (s[i].valid) {
 			shell_print(sh, "%-8s max %d.%d C", s[i].name, s[i].value / 10,

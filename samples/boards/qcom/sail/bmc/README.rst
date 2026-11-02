@@ -67,7 +67,10 @@ The Lemans SAIL serial engine has no protocol firmware after the boot ROM,
 so the console stays silent unless the driver loads one. The firmware is not
 part of the tree. Point :kconfig:option:`CONFIG_UART_QCOM_GENI_SE_FW_FILE` at a
 QUP firmware image (``qupv3fw.elf`` format) that carries a UART protocol, kept
-outside the tree:
+outside the tree. Without the firmware the sample still builds, but the UART
+fails to initialize and nothing is printed.
+
+For the IQ-9075 EVK:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/boards/qcom/sail/bmc
@@ -75,5 +78,16 @@ outside the tree:
    :gen-args: -DCONFIG_UART_QCOM_GENI_SE_FW=y -DCONFIG_UART_QCOM_GENI_SE_FW_FILE=\"/path/to/qupv3fw.elf\"
    :goals: build
 
-Without the firmware the sample still builds, but the UART fails to
-initialize and nothing is printed.
+One image runs on both the IQ-9075 EVK (Lemans) and the VENTUNO Q (Monaco)
+when built for ``ventuno_q_sail/sail_monaco/smp`` with the
+``qcom-sail-iq9075-evk`` snippet. The SoC selects the chip at cold
+initialization. The sample reads the TSENS controllers and allows ``peek`` and
+heartbeat addresses only on Lemans, where they were measured; the console
+exists only there, and on Monaco the image runs without one:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/boards/qcom/sail/bmc
+   :board: ventuno_q_sail/sail_monaco/smp
+   :snippets: qcom-sail-iq9075-evk
+   :gen-args: -DCONFIG_UART_QCOM_GENI_SE_FW=y -DCONFIG_UART_QCOM_GENI_SE_FW_FILE=\"/path/to/qupv3fw.elf\"
+   :goals: build

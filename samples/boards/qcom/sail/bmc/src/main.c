@@ -119,8 +119,8 @@ int main(void)
 {
 	int rc;
 
-	printk("\nSAIL BMC %s boot_mode=0x%x boot_status=%d\n", bmc_build_id(),
-	       (unsigned int)sail_boot_mode_get(), sail_boot_status());
+	printk("\nSAIL BMC %s chip=0x%04x boot_mode=0x%x boot_status=%d\n", bmc_build_id(),
+	       sail_chip_id_get(), (unsigned int)sail_boot_mode_get(), sail_boot_status());
 	bmc_md_start();
 	rc = bmc_platform_start();
 	printk("SAIL BMC platform rc=%d\n", rc);
