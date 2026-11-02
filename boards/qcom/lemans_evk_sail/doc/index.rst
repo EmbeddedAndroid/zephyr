@@ -40,10 +40,13 @@ applications start with ``sail_boot_mode_get()`` returning
 ``SAIL_BOOT_PCINIT_DEFERRED``. If any of these steps fails, the boot stops
 before applications start.
 
-The reset coordinator (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) needs a
-SAIL PMIC and does not start on this board: the main domain's reset and
-shutdown notices are not answered, so a Linux reboot does not restart the
-board.
+The reset coordinator (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) answers
+the main domain's reset and shutdown notices at once on this board, after
+clearing any reset debug enables; there is no SAIL PMIC to prepare. The
+main domain's PS_HOLD drop then resets or powers off the board through the
+main PMICs. A Linux ``reboot`` restarts the board only when the main
+domain's firmware programs a PMIC hard reset for it: after a PMIC warm
+reset the board stays silent, with or without the answer.
 
 The :ref:`snippet-qcom-sail-iq9075-evk` snippet adds this board's node to a
 ``ventuno_q_sail`` build. The resulting image runs on both boards: the chip
