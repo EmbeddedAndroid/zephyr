@@ -6,6 +6,10 @@ zephyr_library_sources(
   entry.S
   soc.c
   boot_mode.c
+  chip.c
+  platform.c
+  platform_dt.c
+  lemans/prepare.c
   monaco/timer.c
   monaco/md_bist.c
   monaco/md_publication.c
@@ -30,10 +34,6 @@ zephyr_library_sources(
   monaco/native_io.c
 )
 zephyr_library_include_directories(. monaco)
-zephyr_library_sources_ifdef(CONFIG_SOC_SAIL_LEMANS
-  lemans/prepare.c
-  lemans/native_prepare.c
-)
 zephyr_library_sources_ifdef(CONFIG_ARM_MPU mpu_regions.c)
 zephyr_include_directories(include)
 zephyr_linker_sources(ROM_START SORT_KEY 0x000sail entry.ld)

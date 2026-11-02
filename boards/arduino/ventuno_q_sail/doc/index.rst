@@ -40,7 +40,10 @@ Connections and IOs
 
 SAIL has no user-facing connectors or UART on this board. It reaches its
 PMICs through its own I2C controller and receives messages from the
-application processors through the receive mailbox.
+application processors through the receive mailbox. The board's
+``qcom,sail-platform`` devicetree node describes the SAIL PMIC and the
+boot policy of its nine rails; the cold initialization uses it when the
+SAIL hardware version register reads Monaco.
 
 Programming and Debugging
 *************************

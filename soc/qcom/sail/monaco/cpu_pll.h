@@ -18,7 +18,7 @@ int monaco_cpu_pll4_enable(struct monaco_clock *clock);
 /*
  * Apply PLL1's 1593.6 MHz configuration. The CPU mux must already select
  * source 2 with divider encoding 2, and PLL1 must be locked at its boot ROM
- * rate (CONFIG_SAIL_CPU_PLL1_BOOT_L) with outputs enabled; any other state is
+ * rate (the chip's cpu_pll1_boot_l) with outputs enabled; any other state is
  * rejected without writes. From a boot ROM rate other than 1593.6 MHz, the
  * new rate is verified after the update.
  */

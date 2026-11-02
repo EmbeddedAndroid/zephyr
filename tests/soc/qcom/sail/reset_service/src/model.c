@@ -4,6 +4,7 @@
  */
 /* Coordinator, receive, preparation and PMIC chain on modeled kernel and device boundaries. */
 #include "api.h"
+#include "sail_test_platform.h"
 #define sail_model_test cold_component_tests
 #include "test_cold_boot.c"
 #undef sail_model_test
@@ -309,7 +310,8 @@ static void begin(void)
 					       .read_mpidr = read_mpidr,
 					       .read_cpsr = read_cpsr,
 					       .md_access_contract = hardware.access_contract,
-					       .md_publication = {&hardware, NULL}};
+					       .md_publication = {&hardware, NULL},
+					       .platforms = &sail_test_platforms};
 	struct monaco_cold_boot_limits limits = monaco_cold_boot_defaults;
 
 	limits.timer_read_budget = 6000;

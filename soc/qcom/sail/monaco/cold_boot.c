@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "cold_boot.h"
+#include "lemans/prepare.h"
 #include <zephyr/sys/util.h>
 
 const struct monaco_cold_boot_limits monaco_cold_boot_defaults = {
@@ -147,6 +148,20 @@ static int entry_state(struct monaco_cold_boot *boot)
 	return (boot->mpidr & UINT32_C(0x00ffffff)) ? MONACO_COLD_ENTRY : 0;
 }
 
+static int select_platform(struct monaco_cold_boot *boot)
+{
+	boot->entry_callback_status = read32(boot, SAIL_HW_VER, &boot->hw_ver);
+	if (boot->entry_callback_status) {
+		return MONACO_COLD_CALLBACK;
+	}
+	boot->chip = sail_chip_find(boot->hw_ver);
+	if (boot->chip == NULL) {
+		return MONACO_COLD_CHIP;
+	}
+	boot->platform = sail_platform_find(boot->io.platforms, boot->chip->id);
+	return boot->platform != NULL ? 0 : MONACO_COLD_CHIP;
+}
+
 /*
  * Runtime PMIC self-test is allowed only for the VENTUNO Q profile, with the
  * board, PMIC sample and identified PMIC from this boot all in agreement.
@@ -199,8 +214,20 @@ static int execute(struct monaco_cold_boot *boot)
 	if (rc != 0) {
 		return rc;
 	}
+	boot->stage = MONACO_COLD_PLATFORM;
+	rc = select_platform(boot);
+	if (rc != 0) {
+		return rc;
+	}
+	if (boot->chip->md_pads) {
+		boot->stage = MONACO_COLD_PADS;
+		rc = lemans_prepare_run(&mmio);
+		if (rc != 0) {
+			return rc;
+		}
+	}
 	boot->stage = MONACO_COLD_BOARD;
-	if (IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+	if (monaco_cold_boot_has_pmic(boot)) {
 		rc = monaco_board_prepare(&mmio, MONACO_BOARD_VENTUNO_Q, &boot->board);
 		if (rc != 0) {
 			return rc;
@@ -220,7 +247,8 @@ static int execute(struct monaco_cold_boot *boot)
 	if (rc != 0) {
 		return rc;
 	}
-	boot->clock = (struct monaco_clock){mmio, &boot->timer, boot->limits.clock_poll_reads};
+	boot->clock = (struct monaco_clock){mmio, &boot->timer, boot->limits.clock_poll_reads,
+					     boot->chip};
 	boot->stage = MONACO_COLD_EARLY_CLOCKS;
 	rc = monaco_early_clocks_enable(&boot->clock, &boot->early_clocks);
 	if (rc != 0) {
@@ -242,7 +270,7 @@ static int execute(struct monaco_cold_boot *boot)
 		return boot->policy_result;
 	}
 	/* HBCU, I2C and PMIC setup only serve the SAIL PMIC. */
-	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
+	if (!monaco_cold_boot_has_pmic(boot)) {
 		boot->stage = MONACO_COLD_PCINIT;
 		return MONACO_COLD_PCINIT_REQUIRED;
 	}
@@ -289,7 +317,9 @@ static int execute(struct monaco_cold_boot *boot)
 	}
 	/* supply_policy_validated stays false; pretarget and tail take narrower flags. */
 	boot->stage = MONACO_COLD_PMIC_SELECT;
-	rc = monaco_pmic_policy_select(&boot->pmic_snapshot, &boot->pmic, false,
+	rc = monaco_pmic_policy_select(&boot->pmic_snapshot, &boot->pmic,
+				       boot->platform->pmic_regulators,
+				       boot->platform->pmic_regulator_count, false,
 				       &boot->pmic_selection);
 	if (rc != 0) {
 		return rc;

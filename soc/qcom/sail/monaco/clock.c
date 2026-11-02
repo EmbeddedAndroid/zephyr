@@ -381,6 +381,9 @@ static int pll_enable(struct monaco_clock *clock, const struct pll_profile *prof
 	if (rc != 0) {
 		return rc;
 	}
+	if (!clock->chip) {
+		return MONACO_CLOCK_INVALID;
+	}
 	rc = read32(clock, base, &mode);
 	if (rc != 0) {
 		return rc;
@@ -396,7 +399,7 @@ static int pll_enable(struct monaco_clock *clock, const struct pll_profile *prof
 	if ((mode & UINT32_C(0x80001205)) || opmode) {
 		return MONACO_CLOCK_STATE;
 	}
-	if (IS_ENABLED(CONFIG_SAIL_PLL_FUSE_TRIM)) {
+	if (clock->chip->pll_fuse_trim) {
 		rc = read32(clock, profile->trim_address, &trim);
 		if (rc != 0) {
 			return rc;

@@ -4,6 +4,7 @@
  */
 #include "pmic_policy.h"
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <limits.h>
 #include <stdio.h>
 #include <zephyr/sys/util.h>
@@ -146,7 +147,15 @@ static void happy_and_supply_guard(void)
 	sail_check(s.last_address == 0x12 && s.last_callback_status == 0);
 	sail_check(s.raw_sku == f.sku && s.raw_soc_identity == f.soc && s.raw_reset_fsm == f.fsm);
 	identify(&f, &pmic);
-	sail_check(monaco_pmic_policy_select(&s, &pmic, false, &p) == 0);
+	/* The board must supply exactly the nine rails. */
+	sail_check(monaco_pmic_policy_select(&s, &pmic, NULL, MONACO_PMIC_BOOT_REGULATORS, false,
+					     &p) == MONACO_PMIC_INVALID);
+	sail_check(monaco_pmic_policy_select(&s, &pmic, sail_test_ventuno_q_rails,
+					     MONACO_PMIC_BOOT_REGULATORS - 1U, false,
+					     &p) == MONACO_PMIC_INVALID);
+	sail_check(p.boot.regulators == NULL && p.boot.regulator_count == 0U);
+	sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, false, &p) == 0);
+	sail_check(p.boot.regulators == sail_test_ventuno_q_rails);
 	sail_check(p.sku == 0x2e7 && p.chip_variant == 0x2a3 && p.chip_version == 0x10000);
 	sail_check(p.boot.topology == MONACO_PMIC_TOPOLOGY_INDEPENDENT &&
 		   p.boot.present_slaves == 7);
@@ -158,7 +167,7 @@ static void happy_and_supply_guard(void)
 	policy_records(&p);
 	sail_check(monaco_pmic_boot(&pmic, &p.boot, &result) == MONACO_PMIC_INVALID);
 	sail_check(result.operations_attempted == 0 && f.identity_reads == 4 && f.calls == 6);
-	sail_check(monaco_pmic_policy_select(&s, &pmic, true, &p) == 0);
+	sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, true, &p) == 0);
 	sail_check(p.boot.supply_policy_validated && f.calls == 6 && f.identity_reads == 4);
 	policy_records(&p);
 	/* SMPS1 requests enable but has no setter permission. */
@@ -200,13 +209,14 @@ static void exact_identities(void)
 		sail_check(rc == (expected ? 0 : MONACO_PMIC_POLICY_IDENTITY));
 		sail_check(f.calls == (expected ? 6U : 2U));
 		if (expected) {
-			sail_check(monaco_pmic_policy_select(&s, &pmic, false, &p) == 0);
+			sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, false,
+							     &p) == 0);
 			sail_check(p.sku == sku && p.chip_variant == expected);
 			policy_records(&p);
 		} else {
 			sail_check(!s.sampled && s.probes_attempted == 0);
-			sail_check(monaco_pmic_policy_select(&s, &pmic, true, &p) ==
-			       MONACO_PMIC_POLICY_INCOMPLETE);
+			sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, true,
+							     &p) == MONACO_PMIC_POLICY_INCOMPLETE);
 			clear_selection(&p);
 		}
 	}
@@ -223,7 +233,7 @@ static void exact_identities(void)
 	for (uint32_t revision = 0; revision <= UINT16_MAX; revision++) {
 		f.soc = UINT32_C(0x601a0000) | revision;
 		sail_check(sample(&f, &s) == 0);
-		sail_check(monaco_pmic_policy_select(&s, &pmic, false, &p) == 0);
+		sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, false, &p) == 0);
 		sail_check(p.chip_version == (revision / 256U) * 65536U + revision % 256U);
 	}
 }
@@ -241,7 +251,7 @@ static void reset_and_versions(void)
 	for (unsigned int n = 0; n < 16; n++) {
 		f.fsm = UINT32_C(0xfffffff0) | n;
 		sail_check(sample(&f, &s) == 0);
-		sail_check(monaco_pmic_policy_select(&s, &pmic, true, &p) ==
+		sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, true, &p) ==
 		       (n >= 12 ? MONACO_PMIC_BOOT_SKIPPED : 0));
 		sail_check(p.boot.reset_fsm == n);
 		if (n >= 12) {
@@ -273,7 +283,8 @@ static void reset_and_versions(void)
 				candidate.version.firmware_revision = byte;
 				break;
 			}
-			int rc = monaco_pmic_policy_select(&s, &candidate, false, &p);
+			int rc = monaco_pmic_policy_select(&s, &candidate, SAIL_TEST_RAILS, false,
+							   &p);
 
 			sail_check(rc ==
 				   (field == 0 && value != 0x82 ? MONACO_PMIC_UNSUPPORTED : 0));
@@ -305,7 +316,8 @@ static void failures_and_retirement(void)
 		for (unsigned int fail = 1; fail <= 6; fail++) {
 			f.fail_at = 0;
 			sail_check(sample(&f, &s) == 0);
-			sail_check(monaco_pmic_policy_select(&s, &pmic, true, &p) == 0);
+			sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, true,
+							     &p) == 0);
 			f.fail_at = fail;
 			f.failure = errors[e];
 			int expected = errors[e] > 0 ? MONACO_PMIC_CALLBACK : errors[e];
@@ -331,8 +343,8 @@ static void failures_and_retirement(void)
 					   : fail == 2 ? MONACO_PMIC_POLICY_SOC
 					   : fail == 3 ? MONACO_PMIC_POLICY_FSM
 						       : MONACO_PMIC_POLICY_PROBE));
-			sail_check(monaco_pmic_policy_select(&s, &pmic, true, &p) ==
-			       MONACO_PMIC_POLICY_INCOMPLETE);
+			sail_check(monaco_pmic_policy_select(&s, &pmic, SAIL_TEST_RAILS, true,
+							     &p) == MONACO_PMIC_POLICY_INCOMPLETE);
 			clear_selection(&p);
 		}
 	}
@@ -386,7 +398,7 @@ static void invalid_inputs(void)
 		int expected = MONACO_PMIC_POLICY_INCOMPLETE;
 
 		s = good;
-		sail_check(monaco_pmic_policy_select(&good, &pmic, true, &p) == 0);
+		sail_check(monaco_pmic_policy_select(&good, &pmic, SAIL_TEST_RAILS, true, &p) == 0);
 		switch (n) {
 		case 0:
 			expected = MONACO_PMIC_INVALID;
@@ -455,7 +467,8 @@ static void invalid_inputs(void)
 			break;
 		}
 		sail_check(monaco_pmic_policy_select(n == 0 ? NULL : &s, n == 1 ? NULL : &candidate,
-						 true, n == 2 ? NULL : &p) == expected);
+						     SAIL_TEST_RAILS, true,
+						     n == 2 ? NULL : &p) == expected);
 		if (n != 2) {
 			clear_selection(&p);
 		}

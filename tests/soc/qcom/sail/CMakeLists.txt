@@ -31,6 +31,7 @@ set(test_cases
   reset_prepare
   pmic_transaction
   lemans_prepare
+  platform
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -48,25 +49,17 @@ target_compile_definitions(testbinary PRIVATE
   SAIL_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
 )
 
-# Monaco fuses the PLL trims; SAIL_PLL_UNTRIMMED builds the SoCs without them.
-if(NOT SAIL_PLL_UNTRIMMED)
-  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_PLL_FUSE_TRIM=1)
+# Chip-dependent models run for Monaco unless SAIL_TEST_LEMANS is set.
+if(SAIL_TEST_LEMANS)
+  target_compile_definitions(testbinary PRIVATE SAIL_TEST_LEMANS=1)
 endif()
-# Monaco's boot ROM leaves PLL1 at L = 83; SAIL_PLL1_BOOT_L models other SoCs.
-if(SAIL_PLL1_BOOT_L)
-  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_CPU_PLL1_BOOT_L=${SAIL_PLL1_BOOT_L})
-else()
-  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_CPU_PLL1_BOOT_L=83)
-endif()
-# VENTUNO Q has a SAIL I2C PMIC; SAIL_NO_I2C_PMIC builds boards without one.
-if(NOT SAIL_NO_I2C_PMIC)
-  target_compile_definitions(testbinary PRIVATE CONFIG_SAIL_I2C_PMIC=1)
-endif()
-
 
 target_sources(testbinary PRIVATE
   main.c
   "models/test_${SAIL_TEST_CASE}.c"
+  models/sail_test_platform.c
+  "${soc_dir}/chip.c"
+  "${soc_dir}/platform.c"
   "${soc_dir}/boot_mode.c"
   "${soc_dir}/monaco/board_policy.c"
   "${soc_dir}/monaco/clock.c"

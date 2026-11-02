@@ -106,6 +106,7 @@ static void begin(void)
 		.read_cpsr = read_cpsr,
 		.md_access_contract = device.access_contract,
 		.md_publication = {&device, NULL},
+		.platforms = &sail_test_platforms,
 	};
 	struct monaco_cold_boot_limits limits = monaco_cold_boot_defaults;
 

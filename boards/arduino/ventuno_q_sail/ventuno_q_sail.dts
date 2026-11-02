@@ -13,6 +13,97 @@
 	chosen {
 		zephyr,sram = &sram0;
 	};
+
+	sail-platform-ventuno-q {
+		compatible = "qcom,sail-platform";
+		qcom,chip-id = <0x601a>;
+
+		pmic {
+			ldo0 {
+				qcom,group = "ldo";
+				qcom,index = <0>;
+				qcom,mode = <2>;
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <3300000>;
+				qcom,write-permitted;
+				qcom,enable-required;
+			};
+
+			ldo1 {
+				qcom,group = "ldo";
+				qcom,index = <1>;
+				qcom,mode = <2>;
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <3300000>;
+				qcom,write-permitted;
+			};
+
+			ldo2 {
+				qcom,group = "ldo";
+				qcom,index = <2>;
+				qcom,mode = <2>;
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <3300000>;
+			};
+
+			ldo3 {
+				qcom,group = "ldo";
+				qcom,index = <3>;
+				qcom,mode = <2>;
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <3300000>;
+				qcom,write-permitted;
+				qcom,enable-required;
+			};
+
+			smps0 {
+				qcom,group = "smps";
+				qcom,index = <0>;
+				qcom,mode = <0>;
+				regulator-min-microvolt = <300000>;
+				regulator-max-microvolt = <3340000>;
+			};
+
+			smps1 {
+				qcom,group = "smps";
+				qcom,index = <1>;
+				qcom,mode = <0>;
+				regulator-min-microvolt = <300000>;
+				regulator-max-microvolt = <3340000>;
+				qcom,enable-required;
+			};
+
+			smps2 {
+				qcom,group = "smps";
+				qcom,index = <2>;
+				qcom,mode = <0>;
+				regulator-min-microvolt = <300000>;
+				regulator-max-microvolt = <3340000>;
+				qcom,write-permitted;
+				qcom,enable-required;
+			};
+
+			smps3 {
+				qcom,group = "smps";
+				qcom,index = <3>;
+				qcom,mode = <0>;
+				regulator-min-microvolt = <300000>;
+				regulator-max-microvolt = <3340000>;
+				qcom,write-permitted;
+				qcom,enable-required;
+			};
+
+			smps4 {
+				qcom,group = "smps";
+				qcom,index = <4>;
+				qcom,mode = <0>;
+				regulator-min-microvolt = <300000>;
+				regulator-max-microvolt = <3340000>;
+				qcom,write-permitted;
+				qcom,enable-required;
+			};
+		};
+	};
 };
 
 &sail_mbox_rx {

@@ -27,7 +27,4 @@ int lemans_prepare_run(const struct monaco_timer_io *io);
 /* True only for the pad configuration registers lemans_prepare_run() writes. */
 bool lemans_prepare_write_allowed(uint32_t address);
 
-/* lemans_prepare_run() on the native registers. */
-int lemans_prepare(void);
-
 #endif

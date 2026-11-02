@@ -4,8 +4,10 @@
  */
 #include "cold_boot.h"
 #include "cpu_pll.h"
+#include "prepare.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/util.h>
@@ -46,6 +48,7 @@ struct model {
 	uint32_t publication_words[5];
 	bool with_publication, phase2_ready;
 	enum md_bist_access_contract access_contract;
+	const struct sail_platforms *platforms;
 	struct monaco_cold_boot *boot;
 };
 
@@ -222,6 +225,8 @@ static int read32(void *context, uint32_t address, uint32_t *value)
 static bool write_allowed(const struct model *m, uint32_t address)
 {
 	switch (m->boot->stage) {
+	case MONACO_COLD_PADS:
+		return lemans_prepare_write_allowed(address);
 	case MONACO_COLD_MD_BIST:
 		return md_bist_write_allowed(address);
 	case MONACO_COLD_TIMER:
@@ -346,7 +351,7 @@ static void seed_pll(struct model *m, uint32_t base)
 		*reg(m, base + 0x1c) = 0;
 	} else if (base == 0xf1101000) {
 		*reg(m, base) = 0x80000007;
-		*reg(m, base + 4) = 83;
+		*reg(m, base + 4) = SAIL_TEST_CHIP->cpu_pll1_boot_l;
 		*reg(m, base + 8) = 0;
 		*reg(m, base + 0xc) = 1;
 		*reg(m, base + 0x10) = 0x02000000;
@@ -368,6 +373,7 @@ static void prepare(struct model *m, struct monaco_cold_boot *boot, bool skip)
 			    .boot = boot,
 			    .runtime_fail_reg = 256U,
 			    .runtime_second_flag = true,
+			    .platforms = &sail_test_platforms,
 			    .access_contract = MD_BIST_ACCESS_PBL_COLD_INHERITED_DEVICE};
 	const struct reg initial[] = {
 		{0xf0146014, 0x2e7},      {0xf0300028, 0x601a0100},
@@ -437,6 +443,7 @@ static int run(struct model *m, struct monaco_cold_boot *boot)
 		.read_cpsr = read_cpsr,
 		.md_access_contract = m->access_contract,
 		.md_publication = {m, m->with_publication ? publication_write : NULL},
+		.platforms = m->platforms,
 	};
 	struct monaco_cold_boot_limits limits = monaco_cold_boot_defaults;
 
@@ -682,11 +689,12 @@ static void runtime_bist_cases(void)
 }
 
 /*
- * Without a SAIL I2C PMIC: no board identity, untrimmed PLLs, and the
+ * Lemans on the IQ-9075 EVK: the pads are configured first, then no board
+ * identity, untrimmed PLLs, PLL1 moved from its boot ROM rate, and the
  * sequence ends after the main-domain BIST without HBCU, I2C or PMIC
  * access. A failing BIST still stops it.
  */
-static void no_i2c_pmic(void)
+static void lemans(void)
 {
 	static struct model m;
 	struct monaco_cold_boot boot;
@@ -699,11 +707,18 @@ static void no_i2c_pmic(void)
 		m.with_publication = true;
 		*reg(&m, 0xf0300028) = 0x60190200;
 		*reg(&m, 0xf0146014) = 0;
+		*reg(&m, 0xf013f000) = 0x5;
+		*reg(&m, 0xf0142000) = 0;
 		sail_check(run(&m, &boot) == MONACO_COLD_PCINIT_REQUIRED);
+		sail_check(boot.chip == &sail_chip_lemans &&
+			   boot.platform == &sail_test_platforms.entries[1]);
+		sail_check(!monaco_cold_boot_has_pmic(&boot));
+		sail_check(*reg(&m, 0xf013f000) == 0x3 && *reg(&m, 0xf0142000) == 0x204);
 		sail_check(boot.stage == MONACO_COLD_PCINIT &&
 			   boot.status == MONACO_COLD_PCINIT_REQUIRED);
 		sail_check(boot.board.stage == 0 && boot.board.descriptor == NULL);
 		sail_check(boot.early_clocks.completed_branches == 62);
+		sail_check(*reg(&m, 0xf1101004) == 83);
 		sail_check(skip ? boot.md_bist_skipped
 				: boot.md_bist_completed && !boot.md_bist_result);
 		if (!skip) {
@@ -718,12 +733,67 @@ static void no_i2c_pmic(void)
 			}
 		}
 	}
+	/* A failed pad write stops before the clocks. */
+	prepare(&m, &boot, true);
+	*reg(&m, 0xf0300028) = 0x60190200;
+	/* Entry state, SAIL_HW_VER twice, then the first pad write. */
+	m.fail_at = 5;
+	sail_check(run(&m, &boot) == LEMANS_PREPARE_IO);
+	sail_check(boot.stage == MONACO_COLD_PADS && !boot.early_clocks.completed_branches);
 	/* Without a publication writer the BIST cannot run and nothing follows it. */
 	prepare(&m, &boot, false);
+	*reg(&m, 0xf0300028) = 0x60190200;
 	sail_check(run(&m, &boot) == MONACO_COLD_MD_PUBLICATION_REQUIRED);
 	sail_check(boot.stage == MONACO_COLD_MD_BIST && !boot.md_bist_skipped);
-	puts("cold boot without a SAIL I2C PMIC: ends after the MD BIST, no board, I2C or PMIC "
-	     "access");
+	puts("cold boot on Lemans without a SAIL PMIC: pads, ends after the MD BIST, no board, "
+	     "I2C or PMIC access");
+}
+
+/*
+ * The chip comes from SAIL_HW_VER and the board from the one platform entry
+ * for it. Anything else stops after the entry checks, before any write.
+ */
+static void chip_selection(void)
+{
+	static struct model m;
+	struct monaco_cold_boot boot;
+	static const struct sail_platform duplicate[] = {
+		{0x601a, sail_test_ventuno_q_rails, MONACO_PMIC_BOOT_REGULATORS},
+		{0x601a, NULL, 0},
+	};
+	static const struct sail_platforms duplicates = {duplicate, ARRAY_SIZE(duplicate)};
+	const struct sail_platforms monaco_only = {sail_test_platforms.entries, 1};
+	static const struct sail_platforms empty = {NULL, 0};
+	const struct {
+		uint32_t hw_ver;
+		const struct sail_platforms *platforms;
+	} refused[] = {
+		{0x60200100, &sail_test_platforms}, {0x601b0100, &sail_test_platforms},
+		{0x00000000, &sail_test_platforms}, {0xffffffff, &sail_test_platforms},
+		{0x60190200, &monaco_only},         {0x601a0100, &duplicates},
+		{0x601a0100, &empty},               {0x601a0100, NULL},
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(refused); i++) {
+		prepare(&m, &boot, true);
+		*reg(&m, 0xf0300028) = refused[i].hw_ver;
+		m.platforms = refused[i].platforms;
+		sail_check(run(&m, &boot) == MONACO_COLD_CHIP);
+		sail_check(boot.stage == MONACO_COLD_PLATFORM && boot.platform == NULL);
+		sail_check(m.writes == 0 && m.count == 3 && m.trace[2].address == 0xf0300028);
+	}
+	prepare(&m, &boot, true);
+	m.fail_at = 3;
+	sail_check(run(&m, &boot) == MONACO_COLD_CALLBACK);
+	sail_check(boot.stage == MONACO_COLD_PLATFORM && boot.chip == NULL && m.writes == 0);
+	prepare(&m, &boot, true);
+	sail_check(run(&m, &boot) == MONACO_COLD_PCINIT_REQUIRED);
+	sail_check(boot.hw_ver == 0x601a0100 && boot.chip == &sail_chip_monaco &&
+		   boot.platform == &sail_test_platforms.entries[0] &&
+		   monaco_cold_boot_has_pmic(&boot));
+	sail_check(boot.pmic_selection.boot.regulators == sail_test_ventuno_q_rails);
+	puts("cold boot: chip and platform selection, unknown chips and missing or duplicate "
+	     "platforms refused before any write");
 }
 
 int sail_model_test(void)
@@ -740,10 +810,11 @@ int sail_model_test(void)
 		clock_events++;
 	}
 	sail_check(fclose(file) == 0 && clock_events == 81);
-	if (!IS_ENABLED(CONFIG_SAIL_I2C_PMIC)) {
-		no_i2c_pmic();
+	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+		lemans();
 		return 0;
 	}
+	chip_selection();
 	success_and_faults();
 	refusals();
 	runtime_bist_cases();

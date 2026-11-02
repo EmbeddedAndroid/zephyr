@@ -10,22 +10,6 @@
 #define RESET_FSM_ADDRESS    UINT32_C(0xf1149024)
 #define MONACO_FAMILY        UINT32_C(0x601a0000)
 
-/* VENTUNO Q rails: write permitted, enable required, mode, voltage limits in uV. */
-static const struct monaco_pmic_regulator_policy ventuno_q_regulators[] = {
-	{MONACO_PMIC_LDO, 0, true, true, 2, 600000, 3300000},
-	{MONACO_PMIC_LDO, 1, true, false, 2, 600000, 3300000},
-	{MONACO_PMIC_LDO, 2, false, false, 2, 600000, 3300000},
-	{MONACO_PMIC_LDO, 3, true, true, 2, 1200000, 3300000},
-	{MONACO_PMIC_SMPS, 0, false, false, 0, 300000, 3340000},
-	{MONACO_PMIC_SMPS, 1, false, true, 0, 300000, 3340000},
-	{MONACO_PMIC_SMPS, 2, true, true, 0, 300000, 3340000},
-	{MONACO_PMIC_SMPS, 3, true, true, 0, 300000, 3340000},
-	{MONACO_PMIC_SMPS, 4, true, true, 0, 300000, 3340000},
-};
-
-_Static_assert(ARRAY_SIZE(ventuno_q_regulators) == MONACO_PMIC_BOOT_REGULATORS,
-	       "PMIC profile must cover nine regulators");
-
 static uint16_t variant(uint32_t raw_sku)
 {
 	switch (raw_sku & UINT32_C(0xffff)) {
@@ -127,13 +111,16 @@ int monaco_pmic_policy_sample(enum monaco_pmic_board_profile profile,
 }
 
 int monaco_pmic_policy_select(const struct monaco_pmic_policy_snapshot *s,
-			      const struct monaco_pmic *pmic, bool supply_policy_validated,
+			      const struct monaco_pmic *pmic,
+			      const struct monaco_pmic_regulator_policy *regulators,
+			      size_t regulator_count, bool supply_policy_validated,
 			      struct monaco_pmic_policy_selection *selection)
 {
 	if (selection) {
 		*selection = (struct monaco_pmic_policy_selection){0};
 	}
-	if (!s || !pmic || !selection) {
+	if (!s || !pmic || !selection || !regulators ||
+	    regulator_count != MONACO_PMIC_BOOT_REGULATORS) {
 		return MONACO_PMIC_INVALID;
 	}
 	if (s->profile != MONACO_PMIC_BOARD_VENTUNO_Q) {
@@ -167,7 +154,7 @@ int monaco_pmic_policy_select(const struct monaco_pmic_policy_snapshot *s,
 		.platform_type_valid = true,
 		.platform_type = 0,
 		.supply_policy_validated = supply_policy_validated,
-		.regulators = ventuno_q_regulators,
+		.regulators = regulators,
 		.regulator_count = MONACO_PMIC_BOOT_REGULATORS,
 	};
 	return selection->boot.reset_fsm >= 12 ? MONACO_PMIC_BOOT_SKIPPED : 0;

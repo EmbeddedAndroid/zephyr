@@ -5,6 +5,7 @@
 #ifndef ZEPHYR_SOC_QCOM_SAIL_MONACO_CLOCK_H_
 #define ZEPHYR_SOC_QCOM_SAIL_MONACO_CLOCK_H_
 
+#include "chip.h"
 #include "timer.h"
 
 enum monaco_clock_error {
@@ -19,6 +20,8 @@ struct monaco_clock {
 	struct monaco_timer_io io;
 	struct monaco_timer *timer;
 	uint32_t max_poll_reads;
+	/* Running chip; the PLL setup needs it. */
+	const struct sail_chip *chip;
 };
 
 bool monaco_clock_write_allowed(uint32_t address);

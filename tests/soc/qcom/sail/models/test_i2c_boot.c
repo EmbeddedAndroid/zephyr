@@ -5,6 +5,7 @@
 #include "i2c_boot.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
@@ -181,7 +182,7 @@ static struct monaco_clock prepare(struct fake *f, struct monaco_timer *timer,
 	*reg(f, SE + 0xe28) = 0x20100000;
 	*reg(f, SE + 0x68) = 0xffff;
 	f->recording = true;
-	return (struct monaco_clock){io, timer, 4};
+	return (struct monaco_clock){io, timer, 4, SAIL_TEST_CHIP};
 }
 
 static int run(struct fake *f, struct monaco_clock *clock, struct monaco_i2c *i2c,

@@ -9,7 +9,7 @@
 #include "boot_mode.h"
 #include "cold_boot.h"
 #include "native_io.h"
-#include "lemans/prepare.h"
+#include "platform.h"
 #if defined(CONFIG_SAIL_RESET_SERVICE)
 #include "reset_service_internal.h"
 #include "monaco/reset_io.h"
@@ -45,14 +45,10 @@ void soc_early_init_hook(void)
 		.md_publication = {
 			.write32 = monaco_native_md_status_write32,
 		},
+		.platforms = &sail_platforms,
 	};
 
-	int rc = 0;
-
-	if (IS_ENABLED(CONFIG_SOC_SAIL_LEMANS)) {
-		rc = lemans_prepare();
-	}
-	boot_result = rc != 0 ? rc : monaco_cold_boot_run(&boot, &io, &monaco_cold_boot_defaults);
+	boot_result = monaco_cold_boot_run(&boot, &io, &monaco_cold_boot_defaults);
 	boot_mode = sail_boot_mode_select(&boot, boot_result,
 					  IS_ENABLED(CONFIG_SAIL_START_WITHOUT_PCINIT));
 	if (boot_mode == SAIL_BOOT_STOPPED) {

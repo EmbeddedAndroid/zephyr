@@ -163,6 +163,10 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 	s->entry = entry;
 	s->retire = retire;
 	s->context = context;
+	if (!monaco_cold_boot_has_pmic(boot)) {
+		irq_unlock(key);
+		return failed(s, -ENODEV);
+	}
 	if (entry != 0x0801d400U || !eligible(s, boot)) {
 		irq_unlock(key);
 		return failed(s, -EPERM);

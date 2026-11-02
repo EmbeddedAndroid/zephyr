@@ -11,6 +11,7 @@
 #include "i2c_profile.h"
 #include "md_bist.h"
 #include "md_publication.h"
+#include "lemans/prepare.h"
 
 #define QTMR_FREQUENCY UINT32_C(0xf140c000)
 #define XO_HZ          UINT32_C(19200000)
@@ -71,7 +72,8 @@ int monaco_native_write32(void *context, uint32_t address, uint32_t value)
 	} else if (!md_bist_write_allowed(address) && !monaco_clock_write_allowed(address) &&
 		   !monaco_cpu_pll_write_allowed(address) && !monaco_hbcu_write_allowed(address) &&
 		   !monaco_i2c_write_allowed(address) &&
-		   !monaco_i2c_profile_write_allowed(address)) {
+		   !monaco_i2c_profile_write_allowed(address) &&
+		   !lemans_prepare_write_allowed(address)) {
 		return -1;
 	}
 	ordered_access();

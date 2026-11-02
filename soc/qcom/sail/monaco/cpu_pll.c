@@ -11,7 +11,6 @@
 #define PLL2          UINT32_C(0xf1102000)
 #define PLL4          UINT32_C(0xf1104000)
 #define LOCK          UINT32_C(0x80000000)
-#define PLL1_BOOT_L   ((uint32_t)CONFIG_SAIL_CPU_PLL1_BOOT_L)
 
 struct setting {
 	uint32_t offset, value;
@@ -87,7 +86,7 @@ bool monaco_cpu_pll_write_allowed(uint32_t address)
 static int valid(const struct monaco_clock *clock)
 {
 	return clock && clock->io.read32 && clock->io.write32 && clock->timer &&
-			       clock->timer->initialized && clock->max_poll_reads
+			       clock->timer->initialized && clock->max_poll_reads && clock->chip
 		       ? 0
 		       : MONACO_CLOCK_INVALID;
 }
@@ -166,10 +165,15 @@ static int matches_pll1(struct monaco_clock *clock, uint32_t mode, uint32_t l)
 }
 
 /* Only the mode and rate are checked: the rate update rewrites the other fields. */
+static uint32_t pll1_boot_l(const struct monaco_clock *clock)
+{
+	return clock->chip->cpu_pll1_boot_l;
+}
+
 static int matches_pll1_boot(struct monaco_clock *clock, uint32_t mode)
 {
 	const struct match fields[] = {
-		{4, 0xff, PLL1_BOOT_L},
+		{4, 0xff, pll1_boot_l(clock)},
 	};
 	if ((mode & (LOCK | 7U)) != (LOCK | 7U)) {
 		return MONACO_CLOCK_STATE;
@@ -351,7 +355,7 @@ int monaco_cpu_pll1_enable(struct monaco_clock *clock)
 		return rc;
 	}
 	if ((mode & (LOCK | 6U)) == (LOCK | 6U)) {
-		if (PLL1_BOOT_L != 83U) {
+		if (pll1_boot_l(clock) != 83U) {
 			return matches_pll1_boot(clock, mode);
 		}
 		return matches_pll1(clock, mode, 83);
@@ -460,7 +464,7 @@ int monaco_cpu_pll1_refresh(struct monaco_clock *clock)
 	if (rc != 0) {
 		return rc;
 	}
-	if (PLL1_BOOT_L != 83U) {
+	if (pll1_boot_l(clock) != 83U) {
 		rc = matches_pll1_boot(clock, mode);
 	} else {
 		rc = matches_pll1(clock, mode, 83);
@@ -470,7 +474,7 @@ int monaco_cpu_pll1_refresh(struct monaco_clock *clock)
 	}
 	/* The caller has already updated the CPU mux, so the rate update is safe. */
 	rc = pll1_update_rate(clock, 83);
-	if (rc != 0 || PLL1_BOOT_L == 83U) {
+	if (rc != 0 || pll1_boot_l(clock) == 83U) {
 		return rc;
 	}
 	rc = read32(clock, PLL1, &mode);

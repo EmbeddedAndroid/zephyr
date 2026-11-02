@@ -6,11 +6,13 @@
 #define ZEPHYR_SOC_QCOM_SAIL_MONACO_COLD_BOOT_H_
 
 #include "board_policy.h"
+#include "chip.h"
 #include "early_clock.h"
 #include "hbcu.h"
 #include "i2c_boot.h"
 #include "monaco_policy.h"
 #include "md_publication.h"
+#include "platform.h"
 #include "pmic_policy.h"
 #include "post_pmic_clock.h"
 
@@ -22,11 +24,14 @@ enum monaco_cold_boot_error {
 	MONACO_COLD_MD_PUBLICATION_REQUIRED,
 	MONACO_COLD_PCINIT_REQUIRED,
 	MONACO_COLD_POLICY_CHANGED,
+	MONACO_COLD_CHIP,
 };
 
 enum monaco_cold_boot_stage {
 	MONACO_COLD_IDLE,
 	MONACO_COLD_ENTRY_STATE,
+	MONACO_COLD_PLATFORM,
+	MONACO_COLD_PADS,
 	MONACO_COLD_BOARD,
 	MONACO_COLD_TIMER,
 	MONACO_COLD_POLICY_PREPARE,
@@ -55,6 +60,8 @@ struct monaco_cold_boot_io {
 	enum md_bist_access_contract md_access_contract;
 	/* Dedicated writer for MD status words; write32 is never used in its place. */
 	struct md_publication_backend md_publication;
+	/* Boards the image supports; the running chip selects one. */
+	const struct sail_platforms *platforms;
 };
 
 struct monaco_cold_boot_limits {
@@ -72,6 +79,9 @@ struct monaco_cold_boot {
 	enum monaco_cold_boot_stage stage;
 	int status;
 	uint32_t cpsr, mpidr;
+	uint32_t hw_ver;
+	const struct sail_chip *chip;
+	const struct sail_platform *platform;
 	int entry_callback_status;
 	int policy_result;
 	bool md_bist_skipped;
@@ -107,12 +117,22 @@ struct monaco_cold_boot {
  * MONACO_COLD_STATE and leaves the first result intact. On failure boot->stage
  * and the component results show how far it got; nothing is rolled back.
  * A BIST or publication failure stops before HBCU and PMIC setup.
+ * The chip comes from SAIL_HW_VER and the board from the io->platforms entry
+ * for that chip; an unsupported chip or a chip without exactly one entry
+ * fails with MONACO_COLD_CHIP before any write. Without a SAIL PMIC on the
+ * board the sequence ends after the main-domain BIST.
  *
  * @retval MONACO_COLD_PCINIT_REQUIRED all implemented steps completed; PCInit
  *         is not implemented, so this is not a completed boot.
  * @retval MONACO_COLD_MD_PUBLICATION_REQUIRED BIST needed but no publication writer.
  * @retval negative error from the failing stage otherwise.
  */
+/* True when the selected board powers SAIL from its own I2C PMIC. */
+static inline bool monaco_cold_boot_has_pmic(const struct monaco_cold_boot *boot)
+{
+	return boot->platform != NULL && boot->platform->pmic_regulators != NULL;
+}
+
 int monaco_cold_boot_run(struct monaco_cold_boot *boot, const struct monaco_cold_boot_io *io,
 			 const struct monaco_cold_boot_limits *limits);
 

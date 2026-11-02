@@ -11,39 +11,11 @@ config SOC_SERIES_SAIL
 
 config SOC_SAIL_LEMANS
 	help
-	  Qualcomm Lemans safety island with Cortex-R52 processors. The PLLs
-	  run on their defaults, as the SoC fuses no SAIL PLL trims.
+	  Qualcomm Lemans safety island with Cortex-R52 processors.
 
 config SOC_SAIL_MONACO
 	help
 	  Qualcomm Monaco safety island with Cortex-R52 processors.
-
-config SAIL_PLL_FUSE_TRIM
-	bool
-	default y if SOC_SAIL_MONACO
-	help
-	  The SoC fuses carry SAIL PLL5 and PLL6 trim values, which the cold
-	  initialization applies on top of the PLL defaults. Without it the
-	  defaults are programmed and no fuse row is read.
-
-config SAIL_CPU_PLL1_BOOT_L
-	int
-	default 80 if SOC_SAIL_LEMANS
-	default 83
-	help
-	  L value of the CPU PLL (PLL1) as the boot ROM leaves it running.
-	  The cold initialization accepts a running PLL1 only at this value.
-	  When it differs from 83, the early clocks move PLL1 to L = 83
-	  (1593.6 MHz) after the CPU clock domain is configured.
-
-config SAIL_I2C_PMIC
-	bool
-	default y if SOC_SAIL_MONACO
-	help
-	  SAIL is supplied by its own PMIC on the SAIL I2C bus (VENTUNO Q).
-	  The cold initialization identifies the board, captures the HBCU
-	  results and sets up that PMIC after the main-domain BIST. Without
-	  it the cold initialization ends after the main-domain BIST.
 
 config SAIL_START_WITHOUT_PCINIT
 	bool "Start applications with PCInit deferred"
@@ -67,7 +39,6 @@ config SAIL_MD_RECEIVE
 
 config SAIL_RESET_SERVICE
 	bool "Main-domain reset coordinator"
-	depends on SAIL_I2C_PMIC
 	depends on SAIL_START_WITHOUT_PCINIT && SAIL_MD_RECEIVE
 	depends on MBOX_QCOM_SAIL_RX && !USERSPACE
 	select EXPERIMENTAL
@@ -77,4 +48,5 @@ config SAIL_RESET_SERVICE
 	  the answer word. For a shutdown the PMIC is prepared for power-off
 	  instead, without the delay. The application starts the coordinator,
 	  polls it from one thread and supplies a callback that retires its
-	  own resources first.
+	  own resources first. On a board without a SAIL PMIC the coordinator
+	  does not start.

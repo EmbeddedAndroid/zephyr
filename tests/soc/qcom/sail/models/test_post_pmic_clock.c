@@ -5,6 +5,7 @@
 #include "post_pmic_clock.h"
 #include "cpu_pll.h"
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/util.h>
@@ -149,7 +150,7 @@ static struct monaco_clock prepare(struct fake *f, struct monaco_timer *timer,
 	*reg(f, 0xf1101004) = 83;
 	*reg(f, 0xf110100c) = 1;
 	*reg(f, 0xf1101010) = 0x02000000;
-	return (struct monaco_clock){io, timer, 4};
+	return (struct monaco_clock){io, timer, 4, SAIL_TEST_CHIP};
 }
 
 static unsigned int first_write(const struct fake *f, uint32_t address)

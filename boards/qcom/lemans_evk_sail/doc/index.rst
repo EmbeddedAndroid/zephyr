@@ -25,8 +25,10 @@ Supported Features
 
 .. zephyr:board-supported-hw::
 
-Before applications start, the SoC code checks that it runs on Lemans and
-configures two SAIL pads as the stock SAIL firmware does: the ``PSAIL_ERR_N``
+Before applications start, the SoC code reads the chip from the SAIL
+hardware version register and takes the board properties from the
+``qcom,sail-platform`` devicetree node for that chip; this board's node
+describes no SAIL PMIC. On Lemans the SoC code configures two SAIL pads as the stock SAIL firmware does: the ``PSAIL_ERR_N``
 pad becomes a pulled-up GPIO input and the SAIL sleep-enable output is routed
 out. It then programs the SAIL clocks, with the PLLs on their defaults and
 the CPU PLL moved from its boot ROM rate to 1593.6 MHz, and takes part in the
@@ -37,9 +39,10 @@ applications start with ``sail_boot_mode_get()`` returning
 ``SAIL_BOOT_PCINIT_DEFERRED``. If any of these steps fails, the boot stops
 before applications start.
 
-The reset coordinator (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) is not
-available: without it the main domain's reset and shutdown notices are not
-answered, so a Linux reboot does not restart the board.
+The reset coordinator (:kconfig:option:`CONFIG_SAIL_RESET_SERVICE`) needs a
+SAIL PMIC and does not start on this board: the main domain's reset and
+shutdown notices are not answered, so a Linux reboot does not restart the
+board.
 
 There is no system timer driver: kernel timeouts and sleeps are not
 available.

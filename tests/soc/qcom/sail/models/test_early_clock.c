@@ -6,6 +6,7 @@
 #include "cpu_pll.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <stdio.h>
 #include <zephyr/sys/util.h>
 
@@ -181,7 +182,7 @@ static void seed_pll(struct fake *f, uint32_t base)
 		*reg(f, base + 0x1c) = 0;
 	} else if (base == PLL1) {
 		*reg(f, base) = 0x80000007;
-		*reg(f, base + 4) = CONFIG_SAIL_CPU_PLL1_BOOT_L;
+		*reg(f, base + 4) = SAIL_TEST_CHIP->cpu_pll1_boot_l;
 		*reg(f, base + 8) = 0;
 		*reg(f, base + 0xc) = 1;
 		*reg(f, base + 0x10) = 0x02000000;
@@ -219,7 +220,7 @@ static struct monaco_clock prepare(struct fake *f, struct monaco_timer *timer, b
 
 	sail_check(monaco_timer_init(timer, &io, 4) == 0);
 	f->accesses = 0;
-	return (struct monaco_clock){io, timer, 4};
+	return (struct monaco_clock){io, timer, 4, SAIL_TEST_CHIP};
 }
 
 static void success_and_faults(void)
@@ -298,7 +299,7 @@ static void refusal_and_bounded_waits(void)
 	const uint32_t rates[] = {84, 0x53, 0x50};
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(rates); i++) {
-		if (rates[i] == CONFIG_SAIL_CPU_PLL1_BOOT_L) {
+		if (rates[i] == SAIL_TEST_CHIP->cpu_pll1_boot_l) {
 			continue;
 		}
 		c = prepare(&f, &timer, false);

@@ -5,6 +5,7 @@
 #include "clock.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/util.h>
@@ -188,7 +189,7 @@ static struct monaco_clock prepare(struct fake *f, struct monaco_timer *timer)
 	*f = (struct fake){.step = 20};
 	sail_check(monaco_timer_init(timer, &io, 4) == 0);
 	reset_trace(f);
-	return (struct monaco_clock){io, timer, 4};
+	return (struct monaco_clock){io, timer, 4, SAIL_TEST_CHIP};
 }
 
 static unsigned int first_write(struct fake *f, uint32_t address)
@@ -679,7 +680,7 @@ int sail_model_test(void)
 	allowlist_and_invalid();
 	branch_and_rcg();
 	se0_clock();
-	if (IS_ENABLED(CONFIG_SAIL_PLL_FUSE_TRIM)) {
+	if (SAIL_TEST_CHIP->pll_fuse_trim) {
 		pll_and_parent_order();
 		injected_failures();
 		pll6_profile_and_guards();

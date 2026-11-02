@@ -15,12 +15,10 @@ target_include_directories(reset_service_model BEFORE PRIVATE
   "${soc_dir}"
   "${soc_dir}/include"
   "${soc_dir}/monaco"
+  "${soc_dir}/lemans"
 )
 target_compile_definitions(reset_service_model PRIVATE
   SAIL_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures"
-  CONFIG_SAIL_PLL_FUSE_TRIM=1
-  CONFIG_SAIL_I2C_PMIC=1
-  CONFIG_SAIL_CPU_PLL1_BOOT_L=83
 )
 target_sources(reset_service_model PRIVATE
   "${soc_dir}/reset_service.c"
@@ -28,6 +26,10 @@ target_sources(reset_service_model PRIVATE
   "${soc_dir}/md_protocol.c"
   "${soc_dir}/boot_mode.c"
   "${soc_dir}/monaco/reset_io.c"
+  "${soc_dir}/chip.c"
+  "${soc_dir}/platform.c"
+  "${soc_dir}/lemans/prepare.c"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../models/sail_test_platform.c"
 )
 foreach(component
     board_policy clock cold_boot cpu_pll early_clock hbcu i2c i2c_boot

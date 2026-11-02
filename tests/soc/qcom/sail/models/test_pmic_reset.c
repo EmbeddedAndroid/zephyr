@@ -5,6 +5,7 @@
 #include "pmic_reset.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
@@ -199,7 +200,8 @@ static void prepare(struct fixture *f, uint32_t sku, uint32_t fsm)
 	sail_check(monaco_pmic_policy_sample(MONACO_PMIC_BOARD_VENTUNO_Q, &policy_io, TIMEOUT_US,
 					 &f->snapshot) == 0);
 	sail_check(monaco_pmic_identify(&f->pmic) == 0);
-	sail_check(monaco_pmic_policy_select(&f->snapshot, &f->pmic, false, &selected) == 0);
+	sail_check(monaco_pmic_policy_select(&f->snapshot, &f->pmic, SAIL_TEST_RAILS, false,
+					     &selected) == 0);
 	pretarget = (struct monaco_pmic_pretarget_inputs){
 		.topology = selected.boot.topology,
 		.present_slaves = selected.boot.present_slaves,

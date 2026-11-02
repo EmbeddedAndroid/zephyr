@@ -13,6 +13,12 @@
 	chosen {
 		zephyr,sram = &sram0;
 	};
+
+	/* SAIL runs from the main-domain PMICs; it has no PMIC of its own. */
+	sail-platform-iq9075-evk {
+		compatible = "qcom,sail-platform";
+		qcom,chip-id = <0x6019>;
+	};
 };
 
 &sail_mbox_rx {

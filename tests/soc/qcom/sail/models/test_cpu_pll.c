@@ -5,6 +5,7 @@
 #include "cpu_pll.h"
 
 #include "sail_check.h"
+#include "sail_test_platform.h"
 #include <stdio.h>
 #include <zephyr/sys/util.h>
 
@@ -172,7 +173,7 @@ static struct monaco_clock prepare(struct fake *f, struct monaco_timer *timer)
 	*f = (struct fake){.step = 20, .lock_after = {1, 1, 1, 1, 1}};
 	sail_check(monaco_timer_init(timer, &io, 4) == 0);
 	reset_trace(f);
-	return (struct monaco_clock){io, timer, 1100};
+	return (struct monaco_clock){io, timer, 1100, SAIL_TEST_CHIP};
 }
 
 static int enable(struct monaco_clock *c, unsigned int index)
@@ -674,7 +675,7 @@ static void boot_rate_sequences(void)
 		sail_check(f.accesses == failure);
 	}
 	printf("PLL1 boot rate L=%u: retune, refusals and %u fault positions passed\n",
-	       (unsigned int)CONFIG_SAIL_CPU_PLL1_BOOT_L, total);
+	       (unsigned int)SAIL_TEST_CHIP->cpu_pll1_boot_l, total);
 }
 
 int sail_model_test(void)
@@ -710,7 +711,7 @@ int sail_model_test(void)
 	sail_check(monaco_cpu_pll4_enable(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
 	sail_check(monaco_cpu_pll1_refresh(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
 	sail_check(monaco_cpu_pll1_raise(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
-	if (CONFIG_SAIL_CPU_PLL1_BOOT_L != 83) {
+	if (SAIL_TEST_CHIP->cpu_pll1_boot_l != 83) {
 		boot_rate_sequences();
 		puts("CPU PLL boot rate tests passed");
 		return 0;

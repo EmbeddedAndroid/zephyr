@@ -77,6 +77,7 @@ int sail_delay_us(uint32_t value);
  * @retval -EALREADY Start was already attempted.
  * @retval -EWOULDBLOCK Caller is in an ISR or has IRQs masked.
  * @retval -EBUSY A timer call is in progress.
+ * @retval -ENODEV The board has no SAIL PMIC.
  * @retval -EPERM The boot state is not eligible.
  * @return Other negative values are receiver errors.
  */

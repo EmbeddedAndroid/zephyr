@@ -71,8 +71,9 @@ int monaco_pmic_policy_sample(enum monaco_pmic_board_profile profile,
 			      struct monaco_pmic_policy_snapshot *snapshot);
 
 /**
- * Build the PMIC boot inputs from a sample and an identified PMIC (device ID
- * 0x82); no hardware access. supply_policy_validated is copied unchanged;
+ * Build the PMIC boot inputs from a sample, an identified PMIC (device ID
+ * 0x82) and the board's nine rails in boot order, which selection then
+ * references; no hardware access. supply_policy_validated is copied unchanged;
  * monaco_pmic_boot() refuses inputs where it is false. Any error clears
  * selection.
  *
@@ -81,7 +82,9 @@ int monaco_pmic_policy_sample(enum monaco_pmic_board_profile profile,
  * @retval negative MONACO_PMIC_ or MONACO_PMIC_POLICY_ error.
  */
 int monaco_pmic_policy_select(const struct monaco_pmic_policy_snapshot *snapshot,
-			      const struct monaco_pmic *pmic, bool supply_policy_validated,
+			      const struct monaco_pmic *pmic,
+			      const struct monaco_pmic_regulator_policy *regulators,
+			      size_t regulator_count, bool supply_policy_validated,
 			      struct monaco_pmic_policy_selection *selection);
 
 #endif
