@@ -496,6 +496,54 @@ int sail_reset_status_get(struct sail_reset_service *s, struct sail_reset_servic
 	return rc;
 }
 
+int sail_reset_notice_get(struct sail_reset_service *s, struct sail_reset_service_notice *out)
+{
+	int rc = worker_context(s);
+	k_spinlock_key_t key;
+
+	if (rc != 0 || out == NULL) {
+		return rc != 0 ? rc : -EINVAL;
+	}
+	key = k_spin_lock(&s->lock);
+	if (s->status.consumed == 0U) {
+		rc = -ENOMSG;
+	} else {
+		const uint8_t *b = s->status.event.bytes;
+
+		out->sequence = s->status.consumed;
+		out->word = (uint32_t)b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 |
+			    (uint32_t)b[3] << 24;
+		out->channel = s->status.event.channel;
+	}
+	k_spin_unlock(&s->lock, key);
+	return rc;
+}
+
+int sail_reset_publish(struct sail_reset_service *s, uint32_t word,
+		       int (*write)(void *context, uint32_t word, uint32_t index))
+{
+	int rc = worker_context(s);
+	k_spinlock_key_t key;
+
+	if (rc != 0 || write == NULL) {
+		return rc != 0 ? rc : -EINVAL;
+	}
+	/* The main domain waits for 0xaaXX0000 answers; never imitate one. */
+	if (word == 0U || (word >> 24) == 0xaaU) {
+		return -EINVAL;
+	}
+	key = k_spin_lock(&s->lock);
+	if (!s->active || s->status.phase != SAIL_RESET_SERVICE_LISTENING ||
+	    s->status.claimed) {
+		rc = -EPERM;
+	}
+	for (uint32_t i = 0U; rc == 0 && i < 4U; i++) {
+		rc = write(s->controls.context, word, i);
+	}
+	k_spin_unlock(&s->lock, key);
+	return rc;
+}
+
 int sail_reset_timer_enter(struct sail_reset_service *s)
 {
 	int rc = thread_context();

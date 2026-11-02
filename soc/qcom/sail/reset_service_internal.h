@@ -7,6 +7,7 @@
 
 #include "boot_mode.h"
 #include "reset_service.h"
+#include <soc.h>
 
 #include <zephyr/spinlock.h>
 
@@ -44,6 +45,10 @@ int sail_reset_poll(struct sail_reset_service *service);
 int sail_reset_stop(struct sail_reset_service *service);
 int sail_reset_status_get(struct sail_reset_service *service,
 			  struct sail_reset_service_status *status);
+int sail_reset_notice_get(struct sail_reset_service *service,
+			  struct sail_reset_service_notice *notice);
+int sail_reset_publish(struct sail_reset_service *service, uint32_t word,
+		       int (*write)(void *context, uint32_t word, uint32_t index));
 int sail_reset_timer_enter(struct sail_reset_service *service);
 void sail_reset_timer_leave(struct sail_reset_service *service);
 

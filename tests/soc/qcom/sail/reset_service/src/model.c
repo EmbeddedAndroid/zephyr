@@ -403,9 +403,14 @@ uint32_t sys_read32(uintptr_t address)
 	       address == 0xf0300044 || address == 0xf1149000);
 	return 0x12345678;
 }
+static uint32_t native_publish, native_published;
 void sys_write32(uint32_t value, uintptr_t address)
 {
-	if (address >= 0xf0305094 && address <= 0xf03050a0) {
+	if (native_publish != 0U) {
+		sail_check(address == 0xf0305094 + native_published * 4 &&
+			   value == ((native_publish >> (8 * native_published)) & 0xff));
+		native_published++;
+	} else if (address >= 0xf0305094 && address <= 0xf03050a0) {
 		static const uint32_t bytes[12] = {0, 0, 3, 0xaa, 0, 0, 0xc, 0xaa, 0, 0, 7, 0xaa};
 
 		sail_check(address == 0xf0305094 + (replies % 4) * 4 && value == bytes[replies]);
@@ -473,6 +478,80 @@ static void warm_tests(void)
 	no_retry();
 	printf("PASS: warm reset policy and 0xaa070000 answer; readback, crash-debug, channel "
 	       "and retire refusals\n");
+}
+static uint32_t published[4], publish_writes, publish_fail;
+static int publish_write(void *ctx, uint32_t word, uint32_t index)
+{
+	sail_check(ctx == NULL && test_irq_depth && index == publish_writes % 4);
+	published[index] = word;
+	publish_writes++;
+	return publish_writes == publish_fail ? -EIO : 0;
+}
+static void notice_check(uint64_t sequence, uint32_t word, uint32_t channel)
+{
+	struct sail_reset_service_notice n;
+
+	sail_check(sail_reset_notice_get(&service, &n) == 0);
+	sail_check(n.sequence == sequence && n.word == word && n.channel == channel);
+}
+/*
+ * The worker reads the last consumed notice and publishes image words in the
+ * answer registers only while listening, never in the answer form.
+ */
+static void notice_tests(void)
+{
+	struct sail_reset_service_notice n;
+
+	begin();
+	publish_writes = publish_fail = 0;
+	sail_check(sail_reset_notice_get(&service, &n) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EINVAL);
+	sail_check(!start());
+	sail_check(sail_reset_notice_get(&service, &n) == -ENOMSG);
+	sail_check(sail_reset_notice_get(&service, NULL) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == 0);
+	sail_check(publish_writes == 4 && published[0] == 0x0102a3b4 && published[3] == 0x0102a3b4);
+	sail_check(sail_reset_publish(&service, 0, publish_write) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0xaa030000, publish_write) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0xaa0c0000, publish_write) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0xaaffffff, publish_write) == -EINVAL);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, NULL) == -EINVAL);
+	test_thread = THREAD(2);
+	sail_check(sail_reset_notice_get(&service, &n) == -EPERM);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EPERM);
+	test_thread = THREAD(1);
+	test_isr = true;
+	sail_check(sail_reset_notice_get(&service, &n) == -EWOULDBLOCK);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EWOULDBLOCK);
+	test_isr = false;
+	sail_check(publish_writes == 4 && !replies && !writes);
+	emit(0, 0xcc010000);
+	sail_check(sail_reset_poll(&service) == 1);
+	notice_check(1, 0xcc010000, 0);
+	emit(0, 0xcb000003);
+	sail_check(sail_reset_poll(&service) == 1);
+	notice_check(2, 0xcb000003, 0);
+	notice_check(2, 0xcb000003, 0);
+	publish_fail = 7;
+	sail_check(sail_reset_publish(&service, 0x00c0ffee, publish_write) == -EIO);
+	sail_check(publish_writes == 7);
+	emit(1, 0xcd070000);
+	sail_check(sail_reset_poll(&service) == 1 && replies == 4);
+	notice_check(3, 0xcd070000, 1);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EPERM);
+	sail_check(publish_writes == 7 && replies == 4);
+	no_retry();
+	notice_check(4, 0xcd0a0000, 1);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EPERM);
+	/* An unknown word stops the service; it is still reported. */
+	begin();
+	sail_check(!start());
+	emit(0, 0x12345678);
+	sail_check(sail_reset_poll(&service) < 0);
+	notice_check(1, 0x12345678, 0);
+	sail_check(sail_reset_publish(&service, 0x0102a3b4, publish_write) == -EPERM);
+	printf("PASS: last notice readback; image word publication gated to the listening "
+	       "worker, answer form refused\n");
 }
 static void shutdown_begin(void)
 {
@@ -747,6 +826,7 @@ int sail_model_test(void)
 	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		return lemans_tests();
 	}
+	notice_tests();
 	begin();
 	sail_check(!start());
 	sail_check(sail_reset_poll(&service) == 0);
@@ -1069,6 +1149,15 @@ int sail_model_test(void)
 	sail_check(monaco_reset_reply(NULL, 0xaa030000, 4) == -EINVAL);
 	sail_check(monaco_reset_reply(NULL, 0xaa010000, 0) == -EINVAL);
 	sail_check(replies == 12 && writes == 4 && barriers == 42);
+	native_publish = 0x00abcdef;
+	for (uint32_t i = 0; i < 4; i++) {
+		sail_check(!monaco_reset_publish(NULL, native_publish, i));
+	}
+	sail_check(monaco_reset_publish(NULL, native_publish, 4) == -EINVAL);
+	sail_check(monaco_reset_publish(NULL, 0, 0) == -EINVAL);
+	sail_check(monaco_reset_publish(NULL, 0xaa030000, 0) == -EINVAL);
+	sail_check(native_published == 4 && barriers == 50);
+	native_publish = 0;
 	printf("PASS: actual coordinator/receive/preparation/CRC-PMIC/timer; %u history "
 	       "boundaries; terminal/context/partial-effect failures; fixed adapters\n",
 	       history_tests);

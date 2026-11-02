@@ -138,4 +138,14 @@ int sail_reset_service_stop(void)
 {
 	return sail_reset_stop(&reset_service);
 }
+
+int sail_reset_service_notice_get(struct sail_reset_service_notice *notice)
+{
+	return sail_reset_notice_get(&reset_service, notice);
+}
+
+int sail_reset_service_publish(uint32_t word)
+{
+	return sail_reset_publish(&reset_service, word, monaco_reset_publish);
+}
 #endif

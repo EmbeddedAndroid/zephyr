@@ -39,6 +39,19 @@ int monaco_reset_write32(void *context, uint32_t address, uint32_t value)
 	return 0;
 }
 
+/* An image word in the answer registers; never one of the answers. */
+int monaco_reset_publish(void *context, uint32_t word, uint32_t index)
+{
+	ARG_UNUSED(context);
+	if (index >= 4U || word == 0U || (word >> 24) == 0xaaU) {
+		return -EINVAL;
+	}
+	barrier_dsync_fence_full();
+	sys_write32((word >> (8U * index)) & 0xffU, 0xf0305094U + index * 4U);
+	barrier_dsync_fence_full();
+	return 0;
+}
+
 int monaco_reset_reply(void *context, uint32_t answer, uint32_t index)
 {
 	ARG_UNUSED(context);
