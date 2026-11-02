@@ -179,7 +179,7 @@ int monaco_early_clocks_enable(struct monaco_clock *clock, struct monaco_early_c
 		}
 		status->completed_branches++;
 	}
-	/* PLL1 already runs at L=83, so the CPU mux is set before the refresh. */
+	/* PLL1 already runs at its boot ROM rate, so the CPU mux is set before the refresh. */
 	status->stage = MONACO_EARLY_CLOCK_CPU_REFRESH;
 	status->address = domains[CPU].command;
 	rc = monaco_clock_rcg_update(clock, domains[CPU].command, 2, 2);

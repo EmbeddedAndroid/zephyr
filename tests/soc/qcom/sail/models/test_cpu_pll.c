@@ -565,6 +565,118 @@ static void raise_sequence_and_faults(void)
 	printf("PLL1 raise: %u fault positions and guarded L83-to-L96 transition passed\n", total);
 }
 
+/* A boot ROM that leaves PLL1 at L = 80: accepted, then moved to L = 83 and verified. */
+static void boot_rate_sequences(void)
+{
+	struct fake f;
+	struct monaco_timer timer;
+	struct monaco_clock c;
+
+	const struct {
+		uint32_t mode, l, alpha, enable, user;
+	} boot = {LOCK | 0x40000007U, 0xabcd0050, 0xbeef1234, 1, 0x02000000};
+	const struct event expected[] = {
+		{'r', PLL1},        {'r', PLL1 + 4},   {'r', PLL1 + 4},    {'w', PLL1 + 4},
+		{'r', PLL1 + 0x10}, {'r', PLL1 + 8},   {'w', PLL1 + 8},    {'w', PLL1 + 0x10},
+		{'r', 0xf1400004},  {'r', 0xf1400000}, {'r', 0xf1400004},  {'r', 0xf1400004},
+		{'r', 0xf1400000},  {'r', 0xf1400004}, {'r', PLL1},        {'r', PLL1},
+		{'r', PLL1 + 4},    {'r', PLL1 + 8},   {'r', PLL1 + 0xc},  {'r', PLL1 + 0x10},
+	};
+
+	for (unsigned int pass = 0; pass < 2; pass++) {
+		c = prepare(&f, &timer);
+		*reg(&f, PLL1) = boot.mode;
+		*reg(&f, PLL1 + 4) = boot.l;
+		*reg(&f, PLL1 + 8) = boot.alpha;
+		*reg(&f, PLL1 + 0xc) = boot.enable;
+		*reg(&f, PLL1 + 0x10) = boot.user;
+		reset_trace(&f);
+		if (pass == 0) {
+			sail_check(monaco_cpu_pll1_enable(&c) == 0);
+			sail_check(f.write_count == 0 && f.accesses == 2);
+			continue;
+		}
+		f.refresh = true;
+		f.enabling[1] = true;
+		sail_check(monaco_cpu_pll1_refresh(&c) == 0);
+		sail_check(f.event_count == ARRAY_SIZE(expected));
+		for (unsigned int i = 0; i < ARRAY_SIZE(expected); i++) {
+			sail_check(f.events[i].operation == expected[i].operation);
+			sail_check(f.events[i].address == expected[i].address);
+		}
+		sail_check(f.write_count == 3);
+		sail_check(f.writes[0].value == 0xabcd0053);
+		sail_check(f.writes[1].value == 0xbeef0000);
+		sail_check(f.writes[2].value == 0x02000000);
+		sail_check(*reg(&f, PLL1) == boot.mode && f.polls[1] == 1);
+	}
+	/* Any other running state is refused without writes. */
+	const struct reg changes[] = {
+		{0, 1}, {0, 2}, {0, 4}, {0, LOCK}, {4, 0x50 ^ 0x53}, {4, 1}, {4, 0x80},
+	};
+	for (unsigned int i = 0; i < ARRAY_SIZE(changes); i++) {
+		for (unsigned int refresh = 0; refresh < 2; refresh++) {
+			c = prepare(&f, &timer);
+			*reg(&f, PLL1) = boot.mode;
+			*reg(&f, PLL1 + 4) = boot.l;
+			*reg(&f, PLL1 + 0xc) = 1;
+			*reg(&f, PLL1 + 0x10) = boot.user;
+			*reg(&f, PLL1 + changes[i].address) ^= changes[i].value;
+			reset_trace(&f);
+			int result = refresh ? monaco_cpu_pll1_refresh(&c)
+					     : monaco_cpu_pll1_enable(&c);
+
+			sail_check(result == MONACO_CLOCK_STATE);
+			sail_check(f.write_count == 0 && f.low_reads == 0);
+		}
+	}
+	/* Fields the rate update does not rewrite are verified at the new rate. */
+	const struct reg stale[] = {{0xc, 1}, {0x10, 0x20000}, {0x10, 0x1000}, {0x10, 0x2000}};
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(stale); i++) {
+		c = prepare(&f, &timer);
+		*reg(&f, PLL1) = boot.mode;
+		*reg(&f, PLL1 + 4) = boot.l;
+		*reg(&f, PLL1 + 0xc) = 1;
+		*reg(&f, PLL1 + 0x10) = boot.user;
+		*reg(&f, PLL1 + stale[i].address) ^= stale[i].value;
+		reset_trace(&f);
+		f.refresh = true;
+		f.enabling[1] = true;
+		sail_check(monaco_cpu_pll1_refresh(&c) == MONACO_CLOCK_STATE);
+		sail_check(f.write_count == 3 && (*reg(&f, PLL1 + 4) & 0xffU) == 0x53);
+	}
+	/* Every access of a successful refresh can fail. */
+	c = prepare(&f, &timer);
+	*reg(&f, PLL1) = boot.mode;
+	*reg(&f, PLL1 + 4) = boot.l;
+	*reg(&f, PLL1 + 0xc) = 1;
+	*reg(&f, PLL1 + 0x10) = boot.user;
+	reset_trace(&f);
+	f.refresh = true;
+	f.enabling[1] = true;
+	sail_check(monaco_cpu_pll1_refresh(&c) == 0);
+	unsigned int total = f.accesses;
+
+	for (unsigned int failure = 1; failure <= total; failure++) {
+		c = prepare(&f, &timer);
+		*reg(&f, PLL1) = boot.mode;
+		*reg(&f, PLL1 + 4) = boot.l;
+		*reg(&f, PLL1 + 0xc) = 1;
+		*reg(&f, PLL1 + 0x10) = boot.user;
+		reset_trace(&f);
+		f.refresh = true;
+		f.enabling[1] = true;
+		f.fail_at = failure;
+		int result = monaco_cpu_pll1_refresh(&c);
+
+		sail_check(result == (f.timer_failure ? MONACO_CLOCK_TIMEBASE : MONACO_CLOCK_IO));
+		sail_check(f.accesses == failure);
+	}
+	printf("PLL1 boot rate L=%u: retune, refusals and %u fault positions passed\n",
+	       (unsigned int)CONFIG_SAIL_CPU_PLL1_BOOT_L, total);
+}
+
 int sail_model_test(void)
 {
 	const uint32_t forbidden[] = {
@@ -598,6 +710,11 @@ int sail_model_test(void)
 	sail_check(monaco_cpu_pll4_enable(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
 	sail_check(monaco_cpu_pll1_refresh(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
 	sail_check(monaco_cpu_pll1_raise(&c) == MONACO_CLOCK_INVALID && f.accesses == 0);
+	if (CONFIG_SAIL_CPU_PLL1_BOOT_L != 83) {
+		boot_rate_sequences();
+		puts("CPU PLL boot rate tests passed");
+		return 0;
+	}
 	off_sequences();
 	active_and_partial();
 	bounds_and_faults();

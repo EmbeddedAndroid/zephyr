@@ -159,7 +159,12 @@ static int fake_write(void *context, uint32_t address, uint32_t value)
 		sail_check(f->events == event_count && f->branches == 62);
 		sail_check(f->pll_refresh_writes < ARRAY_SIZE(refresh));
 		sail_check(address == refresh[f->pll_refresh_writes++]);
-		sail_check(value == *old);
+		/* The refresh moves PLL1 from its boot ROM rate to L = 83. */
+		if (address == PLL1 + 4) {
+			sail_check(value == ((*old & ~UINT32_C(0xff)) | 0x53U));
+		} else {
+			sail_check(value == *old);
+		}
 	}
 	*old = value;
 	return 0;
@@ -176,7 +181,7 @@ static void seed_pll(struct fake *f, uint32_t base)
 		*reg(f, base + 0x1c) = 0;
 	} else if (base == PLL1) {
 		*reg(f, base) = 0x80000007;
-		*reg(f, base + 4) = 0x53;
+		*reg(f, base + 4) = CONFIG_SAIL_CPU_PLL1_BOOT_L;
 		*reg(f, base + 8) = 0;
 		*reg(f, base + 0xc) = 1;
 		*reg(f, base + 0x10) = 0x02000000;
@@ -230,6 +235,7 @@ static void success_and_faults(void)
 		sail_check(status.completed_branches == 62 && f.branches == 62);
 		sail_check(f.events == event_count && f.pll_refresh_writes == 3);
 		sail_check(*reg(&f, DEMET + 4) == (xo ? 0xa000c001U : 0xa000c301U));
+		sail_check(*reg(&f, PLL1 + 4) == 0x53);
 		unsigned int accesses = f.accesses;
 
 		for (unsigned int fault = 1; fault <= accesses; fault++) {
@@ -288,10 +294,20 @@ static void refusal_and_bounded_waits(void)
 	struct monaco_early_clock_status status;
 	struct monaco_clock c = prepare(&f, &timer, false);
 
-	*reg(&f, PLL1 + 4) = 84;
-	sail_check(monaco_early_clocks_enable(&c, &status) == MONACO_CLOCK_STATE);
-	sail_check(f.writes == 0 && status.completed_branches == 0);
-	sail_check(status.stage == MONACO_EARLY_CLOCK_DOMAIN && status.address == 0xf1124000);
+	/* A running PLL1 at any rate but the boot ROM one is refused before any write. */
+	const uint32_t rates[] = {84, 0x53, 0x50};
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(rates); i++) {
+		if (rates[i] == CONFIG_SAIL_CPU_PLL1_BOOT_L) {
+			continue;
+		}
+		c = prepare(&f, &timer, false);
+		*reg(&f, PLL1 + 4) = rates[i];
+		sail_check(monaco_early_clocks_enable(&c, &status) == MONACO_CLOCK_STATE);
+		sail_check(f.writes == 0 && status.completed_branches == 0);
+		sail_check(status.stage == MONACO_EARLY_CLOCK_DOMAIN &&
+			   status.address == 0xf1124000);
+	}
 	for (unsigned int before = 0; before < 2; before++) {
 		c = prepare(&f, &timer, false);
 		f.stuck_command = 0xf111103c;

@@ -17,8 +17,16 @@ tests:
       - SAIL_PLL_UNTRIMMED=1
   soc.qcom.sail.cpu_pll:
     extra_args: SAIL_TEST_CASE=cpu_pll
+  soc.qcom.sail.cpu_pll.boot_l80:
+    extra_args:
+      - SAIL_TEST_CASE=cpu_pll
+      - SAIL_PLL1_BOOT_L=80
   soc.qcom.sail.early_clock:
     extra_args: SAIL_TEST_CASE=early_clock
+  soc.qcom.sail.early_clock.boot_l80:
+    extra_args:
+      - SAIL_TEST_CASE=early_clock
+      - SAIL_PLL1_BOOT_L=80
   soc.qcom.sail.md_bist:
     extra_args: SAIL_TEST_CASE=md_bist
   soc.qcom.sail.md_publication:

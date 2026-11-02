@@ -19,6 +19,15 @@ config SAIL_PLL_FUSE_TRIM
 	  initialization applies on top of the PLL defaults. Without it the
 	  defaults are programmed and no fuse row is read.
 
+config SAIL_CPU_PLL1_BOOT_L
+	int
+	default 83
+	help
+	  L value of the CPU PLL (PLL1) as the boot ROM leaves it running.
+	  The cold initialization accepts a running PLL1 only at this value.
+	  When it differs from 83, the early clocks move PLL1 to L = 83
+	  (1593.6 MHz) after the CPU clock domain is configured.
+
 config SAIL_I2C_PMIC
 	bool
 	default y if SOC_SAIL_MONACO

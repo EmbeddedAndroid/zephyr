@@ -11,6 +11,7 @@
 #define PLL2          UINT32_C(0xf1102000)
 #define PLL4          UINT32_C(0xf1104000)
 #define LOCK          UINT32_C(0x80000000)
+#define PLL1_BOOT_L   ((uint32_t)CONFIG_SAIL_CPU_PLL1_BOOT_L)
 
 struct setting {
 	uint32_t offset, value;
@@ -157,6 +158,18 @@ static int matches_pll1(struct monaco_clock *clock, uint32_t mode, uint32_t l)
 		{8, 0xffff, 0},
 		{0xc, 1, 1},
 		{0x10, 0x12023000, 0x02000000},
+	};
+	if ((mode & (LOCK | 7U)) != (LOCK | 7U)) {
+		return MONACO_CLOCK_STATE;
+	}
+	return match_fields(clock, PLL1, fields, ARRAY_SIZE(fields));
+}
+
+/* Only the mode and rate are checked: the rate update rewrites the other fields. */
+static int matches_pll1_boot(struct monaco_clock *clock, uint32_t mode)
+{
+	const struct match fields[] = {
+		{4, 0xff, PLL1_BOOT_L},
 	};
 	if ((mode & (LOCK | 7U)) != (LOCK | 7U)) {
 		return MONACO_CLOCK_STATE;
@@ -338,6 +351,9 @@ int monaco_cpu_pll1_enable(struct monaco_clock *clock)
 		return rc;
 	}
 	if ((mode & (LOCK | 6U)) == (LOCK | 6U)) {
+		if (PLL1_BOOT_L != 83U) {
+			return matches_pll1_boot(clock, mode);
+		}
 		return matches_pll1(clock, mode, 83);
 	}
 	if (mode & (LOCK | 7U)) {
@@ -444,12 +460,24 @@ int monaco_cpu_pll1_refresh(struct monaco_clock *clock)
 	if (rc != 0) {
 		return rc;
 	}
-	rc = matches_pll1(clock, mode, 83);
+	if (PLL1_BOOT_L != 83U) {
+		rc = matches_pll1_boot(clock, mode);
+	} else {
+		rc = matches_pll1(clock, mode, 83);
+	}
 	if (rc != 0) {
 		return rc;
 	}
-	/* The caller has already updated the CPU mux, so the same-rate update is safe. */
-	return pll1_update_rate(clock, 83);
+	/* The caller has already updated the CPU mux, so the rate update is safe. */
+	rc = pll1_update_rate(clock, 83);
+	if (rc != 0 || PLL1_BOOT_L == 83U) {
+		return rc;
+	}
+	rc = read32(clock, PLL1, &mode);
+	if (rc != 0) {
+		return rc;
+	}
+	return matches_pll1(clock, mode, 83);
 }
 
 int monaco_cpu_pll1_raise(struct monaco_clock *clock)
