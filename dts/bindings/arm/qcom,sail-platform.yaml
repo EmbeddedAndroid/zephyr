@@ -1,0 +1,65 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  A board supported by a Qualcomm safety island (SAIL) image. The cold
+  initialization reads the chip ID from the SAIL hardware version register
+  and uses the one node whose qcom,chip-id matches; the image stops if none
+  or several match. Board properties come only from this node: SAIL never
+  probes for a PMIC.
+
+  An optional "pmic" child describes a PMIC on the SAIL I2C bus that powers
+  SAIL from its own supply, and the rails the cold initialization checks
+  and sets up. Without it the cold initialization ends after the
+  main-domain BIST handshake.
+
+compatible: "qcom,sail-platform"
+
+properties:
+  qcom,chip-id:
+    type: int
+    required: true
+    description: Chip ID, bits 31:16 of the SAIL hardware version register.
+
+child-binding:
+  description: |
+    SAIL I2C PMIC (TI TPS6594-Q1 class, device ID 0x82 at address 0x28).
+    Its children are the nine rails in boot order: LDO0 to LDO3, then
+    SMPS0 to SMPS4.
+
+  child-binding:
+    description: One PMIC rail and the boot policy for it.
+
+    properties:
+      qcom,group:
+        type: string
+        required: true
+        enum:
+          - "ldo"
+          - "smps"
+
+      qcom,index:
+        type: int
+        required: true
+        description: Rail number within its group.
+
+      qcom,mode:
+        type: int
+        required: true
+        description: Required regulator mode (LDO mode 2, SMPS mode 0).
+
+      regulator-min-microvolt:
+        type: int
+        required: true
+
+      regulator-max-microvolt:
+        type: int
+        required: true
+
+      qcom,write-permitted:
+        type: boolean
+        description: The cold initialization may write the rail's voltage.
+
+      qcom,enable-required:
+        type: boolean
+        description: The rail must be enabled for SAIL to run.
