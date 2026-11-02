@@ -36,6 +36,16 @@ config SAIL_START_WITHOUT_PCINIT
 	  returns SAIL_BOOT_PCINIT_DEFERRED. Without it, and after any other
 	  initialization failure, the boot stops before applications start.
 
+config SAIL_PLATFORM_DEVICES_INIT_PRIORITY
+	int "Board device initialization priority"
+	depends on SOC_SERIES_SAIL && !SAIL_SECONDARY_CLUSTER
+	default 55
+	help
+	  PRE_KERNEL_1 priority at which the devices listed in the
+	  qcom,devices property of the running board's qcom,sail-platform
+	  node are initialized. It must come after their clock and pin
+	  controllers and before the console.
+
 config SAIL_MD_RECEIVE
 	bool "Main-domain message queue"
 	depends on SOC_SERIES_SAIL && MBOX

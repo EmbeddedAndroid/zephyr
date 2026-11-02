@@ -21,6 +21,14 @@ properties:
     required: true
     description: Chip ID, bits 31:16 of the SAIL hardware version register.
 
+  qcom,devices:
+    type: phandles
+    description: |
+      Devices that exist only on this board, such as the SAIL console UART
+      of a board that wires it. Each is marked zephyr,deferred-init and is
+      initialized only when the image runs on this board's chip, so an
+      image that also runs on another chip never touches them there.
+
 child-binding:
   description: |
     SAIL I2C PMIC (TI TPS6594-Q1 class, device ID 0x82 at address 0x28).
