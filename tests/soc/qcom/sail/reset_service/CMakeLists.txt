@@ -20,6 +20,10 @@ target_include_directories(reset_service_model BEFORE PRIVATE
 target_compile_definitions(reset_service_model PRIVATE
   SAIL_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures"
 )
+# Model CONFIG_SMP: the worker CPU and its pinning become observable.
+if(SAIL_TEST_SMP)
+  target_compile_definitions(reset_service_model PRIVATE SAIL_TEST_SMP=1)
+endif()
 target_sources(reset_service_model PRIVATE
   "${soc_dir}/reset_service.c"
   "${soc_dir}/md_receive.c"

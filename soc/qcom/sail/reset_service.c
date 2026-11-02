@@ -8,9 +8,10 @@
 #include <errno.h>
 #include <limits.h>
 #include <zephyr/irq.h>
+#include <zephyr/spinlock.h>
 #include <zephyr/sys/util.h>
 
-BUILD_ASSERT(!IS_ENABLED(CONFIG_SMP) && !IS_ENABLED(CONFIG_USERSPACE));
+BUILD_ASSERT(!IS_ENABLED(CONFIG_USERSPACE));
 
 static int thread_context(void)
 {
@@ -20,10 +21,24 @@ static int thread_context(void)
 	if (k_is_in_isr()) {
 		return -EWOULDBLOCK;
 	}
-	key = irq_lock();
+	key = arch_irq_lock();
 	enabled = arch_irq_unlocked(key);
-	irq_unlock(key);
+	arch_irq_unlock(key);
 	return enabled ? 0 : -EWOULDBLOCK;
+}
+
+/*
+ * Under SMP the worker must stay on CPU 0. Enabling the receiver routes the
+ * doorbell interrupts to the CPU that does it, and the cold boot state, the
+ * PMIC bus and the reset controls are only used by the worker.
+ */
+static bool worker_pinned(void)
+{
+#ifdef CONFIG_SMP
+	return arch_curr_cpu()->id == 0U && k_current_get()->base.cpu_mask == BIT(0);
+#else
+	return true;
+#endif
 }
 
 static int worker_context(const struct sail_reset_service *s)
@@ -54,7 +69,7 @@ static bool eligible(void *context, const struct monaco_cold_boot *boot)
 	       boot->pmic.io.context == boot;
 }
 
-/* Caller holds local IRQs. RX callbacks have finished before this snapshot. */
+/* Caller holds the service lock. RX callbacks have finished before this snapshot. */
 static int history(struct sail_reset_service *s)
 {
 	struct sail_md_receive_stats *r = &s->status.receive;
@@ -89,13 +104,13 @@ static int history(struct sail_reset_service *s)
 static int live(void *context)
 {
 	struct sail_reset_service *s = context;
-	unsigned int key = irq_lock();
+	k_spinlock_key_t key = k_spin_lock(&s->lock);
 	int rc = s->busy && s->status.claimed && s->status.retirement_attempted &&
 				 s->status.retirement_error == 0 && eligible(s, s->boot)
 			 ? history(s)
 			 : -ESTALE;
 
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc;
 }
 
@@ -112,7 +127,7 @@ static int cleanup(struct sail_reset_service *s)
 
 static int failed(struct sail_reset_service *s, int error)
 {
-	unsigned int key = irq_lock();
+	k_spinlock_key_t key = k_spin_lock(&s->lock);
 
 	if (s->status.error == 0) {
 		s->status.error = error < 0 ? error : -EIO;
@@ -125,7 +140,7 @@ static int failed(struct sail_reset_service *s, int error)
 		s->status.cleanup_error = s->receiver.stats.cleanup_error;
 	}
 	s->busy = false;
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return s->status.error;
 }
 
@@ -135,7 +150,7 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 		     int (*reply)(void *context, uint32_t answer, uint32_t index), uint32_t entry,
 		     int (*retire)(void *context), void *context)
 {
-	unsigned int key;
+	k_spinlock_key_t key;
 	int rc = thread_context();
 
 	if (rc != 0) {
@@ -146,10 +161,13 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 	    retire == NULL) {
 		return -EINVAL;
 	}
-	key = irq_lock();
+	if (!worker_pinned()) {
+		return -EPERM;
+	}
+	key = k_spin_lock(&s->lock);
 	if (s->attempted || s->timer_busy) {
 		rc = s->attempted ? -EALREADY : -EBUSY;
-		irq_unlock(key);
+		k_spin_unlock(&s->lock, key);
 		return rc;
 	}
 	s->attempted = true;
@@ -164,11 +182,11 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 	s->retire = retire;
 	s->context = context;
 	if (!monaco_cold_boot_has_pmic(boot)) {
-		irq_unlock(key);
+		k_spin_unlock(&s->lock, key);
 		return failed(s, -ENODEV);
 	}
 	if (entry != 0x0801d400U || !eligible(s, boot)) {
-		irq_unlock(key);
+		k_spin_unlock(&s->lock, key);
 		return failed(s, -EPERM);
 	}
 	rc = sail_md_receive_init(&s->receiver, device);
@@ -183,7 +201,7 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 		s->status.phase = SAIL_RESET_SERVICE_LISTENING;
 		s->busy = false;
 	}
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc != 0 ? failed(s, rc) : 0;
 }
 
@@ -248,7 +266,7 @@ static int accept(struct sail_reset_service *s)
 }
 
 /*
- * Caller holds local IRQs: four ordered byte stores of one answer word. Only
+ * Caller holds the service lock: four ordered byte stores of one answer word. Only
  * the reset answer is counted per store; SDI answers are counted when complete.
  */
 static int answer(struct sail_reset_service *s, uint32_t word)
@@ -271,16 +289,16 @@ static int answer(struct sail_reset_service *s, uint32_t word)
 
 int sail_reset_poll(struct sail_reset_service *s)
 {
-	unsigned int key;
+	k_spinlock_key_t key;
 	int rc = worker_context(s);
 
 	if (rc != 0) {
 		return rc;
 	}
-	key = irq_lock();
+	key = k_spin_lock(&s->lock);
 	if (!s->active) {
 		rc = s->status.error != 0 ? s->status.error : -ESHUTDOWN;
-		irq_unlock(key);
+		k_spin_unlock(&s->lock, key);
 		return rc;
 	}
 	s->busy = true;
@@ -290,7 +308,7 @@ int sail_reset_poll(struct sail_reset_service *s)
 	}
 	if (rc == -ENOMSG) {
 		s->busy = false;
-		irq_unlock(key);
+		k_spin_unlock(&s->lock, key);
 		return 0;
 	}
 	if (rc == 0) {
@@ -312,11 +330,11 @@ int sail_reset_poll(struct sail_reset_service *s)
 		}
 		if (rc == 0) {
 			s->busy = false;
-			irq_unlock(key);
+			k_spin_unlock(&s->lock, key);
 			return 1;
 		}
 	}
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	if (rc != 0) {
 		return failed(s, rc);
 	}
@@ -357,7 +375,7 @@ int sail_reset_poll(struct sail_reset_service *s)
 		}
 	}
 
-	key = irq_lock();
+	key = k_spin_lock(&s->lock);
 	rc = eligible(s, s->boot) ? history(s) : -ESTALE;
 	if (rc == 0) {
 		s->status.phase = SAIL_RESET_SERVICE_REPLY;
@@ -368,71 +386,71 @@ int sail_reset_poll(struct sail_reset_service *s)
 		s->status.phase = SAIL_RESET_SERVICE_ACKED;
 		s->busy = false;
 	}
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc != 0 ? failed(s, rc) : 1;
 }
 
 int sail_reset_stop(struct sail_reset_service *s)
 {
 	int rc = worker_context(s);
-	unsigned int key;
+	k_spinlock_key_t key;
 
 	if (rc != 0) {
 		return rc;
 	}
-	key = irq_lock();
+	key = k_spin_lock(&s->lock);
 	if (s->active) {
 		s->status.error = -ESHUTDOWN;
 		s->status.phase = SAIL_RESET_SERVICE_FAILED;
 	}
 	s->active = false;
 	rc = cleanup(s);
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc;
 }
 
 int sail_reset_status_get(struct sail_reset_service *s, struct sail_reset_service_status *out)
 {
 	int rc = worker_context(s);
-	unsigned int key;
+	k_spinlock_key_t key;
 
 	if (rc != 0 || out == NULL) {
 		return rc != 0 ? rc : -EINVAL;
 	}
-	key = irq_lock();
+	key = k_spin_lock(&s->lock);
 	if (s->receiver.device != NULL) {
 		rc = sail_md_receive_stats_get(&s->receiver, &s->status.receive);
 	}
 	if (rc == 0) {
 		*out = s->status;
 	}
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc;
 }
 
 int sail_reset_timer_enter(struct sail_reset_service *s)
 {
 	int rc = thread_context();
-	unsigned int key;
+	k_spinlock_key_t key;
 
 	if (rc != 0) {
 		return rc;
 	}
-	key = irq_lock();
+	key = k_spin_lock(&s->lock);
 	if (s->timer_busy ||
 	    (s->attempted && (s->worker != k_current_get() || s->busy || s->status.claimed))) {
 		rc = -EBUSY;
 	} else {
 		s->timer_busy = true;
 	}
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 	return rc;
 }
 
 void sail_reset_timer_leave(struct sail_reset_service *s)
 {
-	unsigned int key = irq_lock();
+	k_spinlock_key_t key = k_spin_lock(&s->lock);
 
 	s->timer_busy = false;
-	irq_unlock(key);
+	k_spin_unlock(&s->lock, key);
 }

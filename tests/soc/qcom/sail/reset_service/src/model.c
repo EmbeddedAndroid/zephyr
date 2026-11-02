@@ -13,7 +13,14 @@
 
 unsigned int test_irq_depth;
 bool test_isr;
-uintptr_t test_thread = 1;
+#ifdef SAIL_TEST_SMP
+static struct k_thread threads[3];
+struct _cpu test_cpu;
+#define THREAD(n) (&threads[n])
+#else
+#define THREAD(n) ((k_tid_t)(n))
+#endif
+k_tid_t test_thread = THREAD(1);
 static struct model hardware;
 static struct monaco_cold_boot boot;
 static struct sail_reset_service service;
@@ -302,7 +309,12 @@ static void begin(void)
 	memset(shutdown_trace, 0, sizeof(shutdown_trace));
 	test_isr = false;
 	test_irq_depth = 0;
-	test_thread = 1;
+	test_thread = THREAD(1);
+#ifdef SAIL_TEST_SMP
+	threads[1] = (struct k_thread){.base.cpu_mask = BIT(0)};
+	threads[2] = (struct k_thread){.base.cpu_mask = BIT(0)};
+	test_cpu.id = 0U;
+#endif
 	prepare(&hardware, &boot, true);
 	const struct monaco_cold_boot_io io = {.context = &hardware,
 					       .read32 = observed_read,
@@ -806,10 +818,10 @@ int sail_model_test(void)
 	sail_check(start() == -EBUSY);
 	sail_reset_timer_leave(&service);
 	sail_check(!start());
-	test_thread = 2;
+	test_thread = THREAD(2);
 	sail_check(sail_reset_poll(&service) == -EPERM);
 	sail_check(sail_reset_timer_enter(&service) == -EBUSY);
-	test_thread = 1;
+	test_thread = THREAD(1);
 	test_isr = true;
 	sail_check(sail_reset_poll(&service) == -EWOULDBLOCK);
 	test_isr = false;
@@ -832,6 +844,25 @@ int sail_model_test(void)
 	sail_check(!sail_reset_stop(&service) && service.status.error == -ECANCELED &&
 	       service.status.cleanup_error == -EIO);
 	shutdown_tests();
+#ifdef SAIL_TEST_SMP
+	/* The worker must be pinned to CPU 0 alone and run there; a refusal leaves no state. */
+	const uint32_t masks[] = {BIT(0) | BIT(1), BIT(1), 0U};
+
+	for (size_t i = 0; i < ARRAY_SIZE(masks); i++) {
+		begin();
+		threads[1].base.cpu_mask = masks[i];
+		sail_check(start() == -EPERM && mbox_calls == 0 && !service.attempted);
+	}
+	begin();
+	test_cpu.id = 1U;
+	sail_check(start() == -EPERM && mbox_calls == 0 && !service.attempted);
+	test_cpu.id = 0U;
+	sail_check(!start() && service.status.phase == SAIL_RESET_SERVICE_LISTENING);
+	emit(1, 0xcd070000);
+	sail_check(sail_reset_poll(&service) == 1 && retires == 1 && replies == 4);
+	sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED);
+	sail_check(!service.lock.held && !service.receiver.lock.held);
+#endif
 	/* Native allowlist, store widths and barriers; bus success is modeled. */
 	replies = writes = barriers = 0;
 	uint32_t value;

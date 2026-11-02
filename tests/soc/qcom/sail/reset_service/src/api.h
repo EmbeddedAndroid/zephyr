@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
-#define CONFIG_SMP       0
 #define CONFIG_USERSPACE 0
 #define IS_ENABLED(x)    (x)
 #define BIT(n)           (1U << (n))
@@ -21,8 +20,26 @@
 #define K_NO_WAIT 0
 extern unsigned int test_irq_depth;
 extern bool test_isr;
-extern uintptr_t test_thread;
+#ifdef SAIL_TEST_SMP
+#define CONFIG_SMP 1
+struct k_thread {
+	struct {
+		uint32_t cpu_mask;
+	} base;
+};
+typedef struct k_thread *k_tid_t;
+struct _cpu {
+	uint32_t id;
+};
+extern struct _cpu test_cpu;
+static inline struct _cpu *arch_curr_cpu(void)
+{
+	return &test_cpu;
+}
+#else
 typedef uintptr_t k_tid_t;
+#endif
+extern k_tid_t test_thread;
 static inline bool k_is_in_isr(void)
 {
 	return test_isr;

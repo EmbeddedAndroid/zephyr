@@ -7,3 +7,10 @@ tests:
       - soc
       - mbox
       - qcom
+  soc.qcom.sail.reset_service.smp:
+    type: unit
+    extra_args: SAIL_TEST_SMP=1
+    tags:
+      - soc
+      - mbox
+      - qcom

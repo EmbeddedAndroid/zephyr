@@ -60,15 +60,17 @@ int sail_delay_us(uint32_t value);
  * Valid once per boot, only in boot mode SAIL_BOOT_PCINIT_DEFERRED. The caller
  * must own both receive channels, the PMIC, I2C and reset controls exclusively,
  * and must have set up IRQ routing. The calling thread becomes the only thread
- * that may poll or stop the service. All code and data reached from it must be
- * in SRAM.
+ * that may poll or stop the service. Under SMP that thread must be pinned to
+ * CPU 0 only (k_thread_cpu_pin() before it starts). All code and data reached
+ * from it must be in SRAM.
  *
- * @p retire runs once with local IRQs locked, after a secure reset or shutdown
- * notice is claimed and before any control, PMIC or answer write. It must not
- * block, must stop all application use of resources lost in the reset, and
- * must return zero only once that is done. Any failure is terminal. While the
- * service exists, sail_time_us() and sail_delay_us() work only from this
- * thread between polls, and not at all after a claim.
+ * @p retire runs once with the service spinlock held (local IRQs locked),
+ * after a secure reset or shutdown notice is claimed and before any control,
+ * PMIC or answer write. It must not block, must stop all application use of
+ * resources lost in the reset, and must return zero only once that is done.
+ * Any failure is terminal. While the service exists, sail_time_us() and
+ * sail_delay_us() work only from this thread between polls, and not at all
+ * after a claim.
  *
  * @param retire Required resource retirement callback.
  * @param context Callback context; must outlive the boot, may be NULL.
@@ -78,7 +80,8 @@ int sail_delay_us(uint32_t value);
  * @retval -EWOULDBLOCK Caller is in an ISR or has IRQs masked.
  * @retval -EBUSY A timer call is in progress.
  * @retval -ENODEV The board has no SAIL PMIC.
- * @retval -EPERM The boot state is not eligible.
+ * @retval -EPERM The boot state is not eligible, or under SMP the caller is
+ *	   not pinned to CPU 0.
  * @return Other negative values are receiver errors.
  */
 int sail_reset_service_start(int (*retire)(void *context), void *context);

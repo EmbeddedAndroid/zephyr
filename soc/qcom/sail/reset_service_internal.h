@@ -8,6 +8,8 @@
 #include "boot_mode.h"
 #include "reset_service.h"
 
+#include <zephyr/spinlock.h>
+
 /* Owned by soc.c next to the cold boot state; not for application use. */
 struct sail_reset_service {
 	struct sail_md_receive receiver;
@@ -29,6 +31,7 @@ struct sail_reset_service {
 	bool secure_boot_seen;
 	bool hyp_boot_seen;
 	bool timer_busy;
+	struct k_spinlock lock;
 };
 
 int sail_reset_start(struct sail_reset_service *service, struct monaco_cold_boot *boot,

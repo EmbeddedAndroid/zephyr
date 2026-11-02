@@ -41,6 +41,7 @@ config SAIL_RESET_SERVICE
 	bool "Main-domain reset coordinator"
 	depends on SAIL_START_WITHOUT_PCINIT && SAIL_MD_RECEIVE
 	depends on MBOX_QCOM_SAIL_RX && !USERSPACE
+	depends on !SMP || SCHED_CPU_MASK
 	select EXPERIMENTAL
 	help
 	  Answer the main domain's reset (SOC_HR) and shutdown notices. For a
@@ -48,5 +49,6 @@ config SAIL_RESET_SERVICE
 	  the answer word. For a shutdown the PMIC is prepared for power-off
 	  instead, without the delay. The application starts the coordinator,
 	  polls it from one thread and supplies a callback that retires its
-	  own resources first. On a board without a SAIL PMIC the coordinator
+	  own resources first. Under SMP that thread must be pinned to CPU 0
+	  before it starts. On a board without a SAIL PMIC the coordinator
 	  does not start.
