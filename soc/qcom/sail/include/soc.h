@@ -33,6 +33,14 @@ enum sail_boot_mode sail_boot_mode_get(void);
 int sail_boot_status(void);
 
 /**
+ * @brief Return the chip the image runs on.
+ *
+ * @return Chip ID (bits 31:16 of the SAIL hardware version register) of the
+ *	   chip the cold initialization selected, or 0 if it selected none.
+ */
+uint16_t sail_chip_id_get(void);
+
+/**
  * @brief Read the boot timer in microseconds.
  *
  * @retval 0 @p value holds the time.

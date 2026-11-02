@@ -69,6 +69,11 @@ int sail_boot_status(void)
 	return boot_result;
 }
 
+uint16_t sail_chip_id_get(void)
+{
+	return boot.chip != NULL ? boot.chip->id : 0U;
+}
+
 int sail_time_us(uint64_t *value)
 {
 	if (!sail_boot_timer_qualified(&boot, boot_result, boot_mode)) {
