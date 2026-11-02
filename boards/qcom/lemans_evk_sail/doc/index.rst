@@ -9,8 +9,9 @@ Cortex-R52 cores. SAIL boots from its own SPI-NOR flash, before the
 application processors. On this board SAIL has no PMIC of its own: it is
 supplied by the main-domain PMICs.
 
-This board runs Zephyr on core 0 of the safety island. The other SAIL cores
-stay parked.
+This board runs Zephyr on core 0 of the safety island; the other SAIL cores
+stay parked. The multi-core variants below run Zephyr on every core the
+fuses allow.
 
 Hardware
 ********
@@ -48,8 +49,30 @@ The :ref:`snippet-qcom-sail-iq9075-evk` snippet adds this board's node to a
 ``ventuno_q_sail`` build. The resulting image runs on both boards: the chip
 it finds at cold initialization selects the sequence.
 
-There is no system timer driver: kernel timeouts and sleeps are not
-available.
+Single-core images have no system timer driver: kernel timeouts and sleeps
+are not available.
+
+Multi-core images
+=================
+
+The four SAIL cores form two clusters of two, and each cluster has its own
+GIC, so one Zephyr image spans one cluster. Two board variants build the
+images of a multi-core system:
+
+- ``lemans_evk_sail/sail_lemans/smp``: the cold-initialized image on cluster 0, an SMP
+  image of both cluster-0 cores. Its SRAM ends at 0x080c0000.
+- ``lemans_evk_sail/sail_lemans/cluster1``: an SMP image of the two cluster-1 cores at
+  0x080c0000, without cold initialization or main-domain services.
+
+Both images must be loaded together in the SAIL image. After its cold
+initialization the cluster-0 image starts cluster 1 at
+:kconfig:option:`CONFIG_SAIL_SECONDARY_CLUSTER_ENTRY` when an entry vector
+is found there. Each image starts the second core of its cluster unless the
+boot fuses pair the cluster into lockstep; ``sail_core_status()`` reports
+the result for each core. The images share the SRAM page at 0x080f8000.
+
+Both variants use the per-core generic timer as the system timer. A reset
+coordinator in the cluster-0 image must run on a thread pinned to CPU 0.
 
 Programming and Debugging
 *************************

@@ -1,0 +1,14 @@
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+identifier: lemans_evk_sail/sail_lemans/cluster1
+name: Qualcomm Lemans EVK safety island (cluster 1)
+arch: arm
+type: mcu
+toolchain:
+  - zephyr
+ram: 224
+vendor: qcom
+testing:
+  only_tags:
+    - soc

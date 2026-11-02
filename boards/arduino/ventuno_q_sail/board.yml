@@ -7,3 +7,6 @@ board:
   vendor: arduino
   socs:
     - name: sail_monaco
+      variants:
+        - name: smp
+        - name: cluster1

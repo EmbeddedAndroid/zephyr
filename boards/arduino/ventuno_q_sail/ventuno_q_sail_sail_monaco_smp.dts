@@ -1,0 +1,7 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "ventuno_q_sail.dts"
+#include <qcom/sail-smp.dtsi>

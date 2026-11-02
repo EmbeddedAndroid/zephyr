@@ -6,3 +6,6 @@ boards:
   ventuno_q_sail/sail_monaco:
     append:
       EXTRA_DTC_OVERLAY_FILE: qcom-sail-iq9075-evk.overlay
+  ventuno_q_sail/sail_monaco/smp:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: qcom-sail-iq9075-evk.overlay

@@ -7,3 +7,6 @@ board:
   vendor: qcom
   socs:
     - name: sail_lemans
+      variants:
+        - name: smp
+        - name: cluster1

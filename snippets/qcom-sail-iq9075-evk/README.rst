@@ -20,4 +20,4 @@ it ends the cold initialization after the main-domain BIST handshake.
 Requirements
 ************
 
-The ``ventuno_q_sail`` board.
+The ``ventuno_q_sail`` board, single-core or its ``smp`` variant.
