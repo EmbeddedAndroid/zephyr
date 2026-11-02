@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <zephyr/kernel.h>
 
 #define BMC_NOTICE_HISTORY 16U
 
@@ -76,6 +77,26 @@ const char *bmc_build_id(void);
 void bmc_out(const char *fmt, ...);
 bool bmc_readable(uint32_t sail_addr);
 bool bmc_log_local(void);
+enum bmc_thread {
+	BMC_THREAD_PLATFORM,
+	BMC_THREAD_MD,
+	BMC_THREAD_LOG,
+	BMC_THREAD_SHELL,
+	BMC_THREADS,
+};
+
+/* Where each thread is pinned and has run. */
+struct bmc_thread_cpus {
+	const char *name;
+	uint32_t pinned;
+	uint32_t seen;
+	uint32_t runs;
+};
+
+void bmc_cpu_mark(enum bmc_thread thread);
+void bmc_cpu_report(enum bmc_thread thread, struct bmc_thread_cpus *out);
+void bmc_cpu_place(enum bmc_thread thread, struct k_thread *tid);
+uint32_t bmc_app_cpu(void);
 int bmc_platform_start(void);
 int bmc_platform_status(void);
 uint32_t bmc_image_word(void);

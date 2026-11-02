@@ -50,6 +50,7 @@ static void platform_thread(void *p1, void *p2, void *p3)
 	rc = sail_reset_service_start(retire, NULL);
 	atomic_set(&coordinator_rc, rc);
 	while (rc >= 0) {
+		bmc_cpu_mark(BMC_THREAD_PLATFORM);
 		rc = sail_reset_service_poll();
 		if (rc != 0 && sail_reset_service_notice_get(&notice) == 0 &&
 		    notice.sequence != seen) {
@@ -94,10 +95,7 @@ int bmc_platform_start(void)
 	k_thread_create(&thread, platform_stack, K_THREAD_STACK_SIZEOF(platform_stack),
 			platform_thread, NULL, NULL, NULL, K_PRIO_COOP(1), 0, K_FOREVER);
 	k_thread_name_set(&thread, "platform");
-#if defined(CONFIG_SMP)
-	/* The coordinator requires a worker that stays on CPU 0. */
-	(void)k_thread_cpu_pin(&thread, 0);
-#endif
+	bmc_cpu_place(BMC_THREAD_PLATFORM, &thread);
 	k_thread_start(&thread);
 	return 0;
 }

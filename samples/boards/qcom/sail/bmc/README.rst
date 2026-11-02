@@ -39,10 +39,22 @@ hands every notice the coordinator consumes to the MD monitor, which is how
 sample stops reading MD registers (heartbeat, sensors, ``peek``), as the MD
 may be gone.
 
+Cores
+*****
+
+On a multi-core (``smp``) target the platform thread stays on CPU 0, and the
+MD monitor, the status line and the shell run on CPU 1 when the image started
+it (the fuses may pair it with CPU 0 into lockstep; then everything runs on
+CPU 0). ``cpus`` shows the core start status, the CPU the shell command runs
+on with its MPIDR, and for each thread the CPU it is pinned to and the CPUs it
+has run on (bit masks).
+
 Built with ``-DBMC_IMAGE_ID=<24-bit value>``, the platform thread also
 publishes that value in the SAIL-to-MD answer registers after XBL's boot
 success notice, and again 12 s after each SDI-disable answer, so software on
-the MD can tell which image runs. ``md status`` shows the coordinator result.
+the MD can tell which image runs. Bits 31:24 carry flags: bit 24 CPU 1 was
+started, bit 25 the MD monitor and status line threads ran and only on CPU 1,
+bit 26 the platform thread ran and only on CPU 0. ``md status`` shows the coordinator result.
 
 Heartbeat from Linux
 ********************

@@ -8,6 +8,7 @@ tests:
     build_only: true
     platform_allow:
       - lemans_evk_sail/sail_lemans
+      - lemans_evk_sail/sail_lemans/smp
     integration_platforms:
       - lemans_evk_sail/sail_lemans
     tags:

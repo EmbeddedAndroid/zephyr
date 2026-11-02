@@ -28,8 +28,35 @@ static int cmd_version(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
+	bmc_cpu_mark(BMC_THREAD_SHELL);
 	shell_print(sh, "SAIL BMC %s chip=0x%04x boot_mode=0x%x boot_status=%d", bmc_build_id(),
 		    sail_chip_id_get(), (unsigned int)sail_boot_mode_get(), sail_boot_status());
+	return 0;
+}
+
+static int cmd_cpus(const struct shell *sh, size_t argc, char **argv)
+{
+	uint32_t mpidr;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	bmc_cpu_mark(BMC_THREAD_SHELL);
+	__asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r"(mpidr));
+	shell_print(sh, "shell on cpu=%u mpidr=0x%08x app_cpu=%u", arch_curr_cpu()->id, mpidr,
+		    bmc_app_cpu());
+#if defined(CONFIG_SMP)
+	for (uint32_t c = 0U; c < 2U; c++) {
+		shell_print(sh, "cluster%u core0=%d core1=%d", c, sail_core_status(c, 0U),
+			    sail_core_status(c, 1U));
+	}
+#endif
+	for (int t = 0; t < BMC_THREADS; t++) {
+		struct bmc_thread_cpus r;
+
+		bmc_cpu_report(t, &r);
+		shell_print(sh, "thread %-8s pinned=0x%x ran_on=0x%x runs=%u", r.name, r.pinned,
+			    r.seen, r.runs);
+	}
 	return 0;
 }
 
@@ -227,3 +254,4 @@ SHELL_CMD_REGISTER(sensors, NULL, "SoC temperatures", cmd_sensors);
 SHELL_CMD_ARG_REGISTER(log, NULL, "on [ms] [local] | off: periodic status line", cmd_log, 2, 2);
 SHELL_CMD_ARG_REGISTER(peek, NULL, "<address> [count]: read device words", cmd_peek, 2, 1);
 SHELL_CMD_REGISTER(version, NULL, "Build fingerprint", cmd_version);
+SHELL_CMD_REGISTER(cpus, NULL, "Cores and where the threads run", cmd_cpus);

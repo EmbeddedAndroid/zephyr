@@ -226,6 +226,7 @@ static void md_thread(void *a, void *b, void *c)
 	ARG_UNUSED(c);
 
 	for (;;) {
+		bmc_cpu_mark(BMC_THREAD_MD);
 		while (k_msgq_get(&notice_queue, &ev, K_NO_WAIT) == 0) {
 			record_notice(&ev);
 		}
@@ -243,8 +244,10 @@ static struct k_thread md_tid;
 void bmc_md_start(void)
 {
 	k_thread_create(&md_tid, md_stack, K_THREAD_STACK_SIZEOF(md_stack), md_thread, NULL,
-			NULL, NULL, K_PRIO_PREEMPT(2), 0, K_NO_WAIT);
+			NULL, NULL, K_PRIO_PREEMPT(2), 0, K_FOREVER);
 	k_thread_name_set(&md_tid, "md");
+	bmc_cpu_place(BMC_THREAD_MD, &md_tid);
+	k_thread_start(&md_tid);
 }
 
 void bmc_md_status_get(struct bmc_md_status *out)
