@@ -3,10 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <qcom/sail-lemans-peripherals.dtsi>
+
 /* Keep in sync with boards/qcom/lemans_evk_sail/lemans_evk_sail.dts. */
 / {
+	chosen {
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
+	};
+
 	sail-platform-iq9075-evk {
 		compatible = "qcom,sail-platform";
 		qcom,chip-id = <0x6019>;
+		qcom,devices = <&uart2>;
 	};
+};
+
+&uart2 {
+	status = "okay";
+	zephyr,deferred-init;
 };
