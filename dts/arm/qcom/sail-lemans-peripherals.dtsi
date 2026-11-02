@@ -1,0 +1,65 @@
+/*
+ * Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Lemans SAIL pad controller, clock controller and serial engines. Included
+ * by sail-lemans.dtsi, and by images built for another chip that also run on
+ * Lemans, which must not touch these blocks on the other chip.
+ */
+
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <zephyr/dt-bindings/clock/qcom-sail-cc.h>
+
+/ {
+	soc {
+		interrupt-parent = <&gic>;
+
+		tlmm: pinctrl@f0100000 {
+			compatible = "qcom,sail-tlmm";
+			reg = <0xf0100000 0x44000>;
+
+			se2_uart_tx: se2_uart_tx {
+				pinmux = <6 1>;
+				drive-strength = <4>;
+				bias-disable;
+			};
+
+			se2_uart_rx: se2_uart_rx {
+				pinmux = <7 1>;
+				drive-strength = <4>;
+				bias-disable;
+			};
+		};
+
+		sailcc: clock-controller@f1110000 {
+			compatible = "qcom,sail-cc";
+			reg = <0xf1110000 0x10000>;
+			#clock-cells = <1>;
+		};
+
+		qupv3_0: geniqup@f19c0000 {
+			compatible = "qcom,geni-se-qup";
+			reg = <0xf19c0000 0x6000>;
+			clocks = <&sailcc SAIL_CC_QUPV3_WRAP0_M_AHB_CLK>,
+				 <&sailcc SAIL_CC_QUPV3_WRAP0_S_AHB_CLK>,
+				 <&sailcc SAIL_CC_QUPV3_WRAP0_CORE_CLK>,
+				 <&sailcc SAIL_CC_QUPV3_WRAP0_CORE_2X_CLK>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			uart2: serial@f1988000 {
+				compatible = "qcom,geni-uart";
+				reg = <0xf1988000 0x4000>;
+				interrupts = <GIC_SPI 372 IRQ_TYPE_LEVEL 0xa0>;
+				clocks = <&sailcc SAIL_CC_QUPV3_WRAP0_S2_CLK>;
+				current-speed = <115200>;
+				pinctrl-0 = <&se2_uart_tx &se2_uart_rx>;
+				pinctrl-names = "default";
+				status = "disabled";
+			};
+		};
+	};
+};
