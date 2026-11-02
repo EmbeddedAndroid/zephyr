@@ -11,6 +11,7 @@ zephyr_library_sources_ifndef(CONFIG_SAIL_SECONDARY_CLUSTER
   chip.c
   platform.c
   platform_dt.c
+  platform_devices.c
   lemans/prepare.c
   monaco/timer.c
   monaco/md_bist.c
