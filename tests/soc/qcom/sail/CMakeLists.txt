@@ -32,6 +32,7 @@ set(test_cases
   pmic_transaction
   lemans_prepare
   platform
+  cores
 )
 
 if(NOT SAIL_TEST_CASE IN_LIST test_cases)
@@ -59,6 +60,7 @@ target_sources(testbinary PRIVATE
   "models/test_${SAIL_TEST_CASE}.c"
   models/sail_test_platform.c
   "${soc_dir}/chip.c"
+  "${soc_dir}/cores.c"
   "${soc_dir}/platform.c"
   "${soc_dir}/boot_mode.c"
   "${soc_dir}/monaco/board_policy.c"

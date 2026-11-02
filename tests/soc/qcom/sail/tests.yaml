@@ -73,3 +73,5 @@ tests:
     extra_args: SAIL_TEST_CASE=lemans_prepare
   soc.qcom.sail.platform:
     extra_args: SAIL_TEST_CASE=platform
+  soc.qcom.sail.cores:
+    extra_args: SAIL_TEST_CASE=cores
