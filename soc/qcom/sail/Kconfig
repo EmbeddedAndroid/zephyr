@@ -30,12 +30,12 @@ config SAIL_START_WITHOUT_PCINIT
 
 config SAIL_MD_RECEIVE
 	bool "Main-domain message queue"
-	depends on SOC_SERIES_SAIL && MBOX && !SMP
+	depends on SOC_SERIES_SAIL && MBOX
 	help
 	  Queue the messages the main domain sends through the SAIL receive
 	  mailbox so that a thread can handle them. The application starts
-	  reception and must be the only user of both channels. The queue
-	  uses irq_lock() for exclusion, so it needs a single CPU.
+	  reception and must be the only user of both channels. The mailbox
+	  callback and the API serialize on a spinlock in the receiver.
 
 config SAIL_RESET_SERVICE
 	bool "Main-domain reset coordinator"

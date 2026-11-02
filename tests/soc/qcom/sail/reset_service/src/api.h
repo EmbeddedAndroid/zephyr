@@ -46,6 +46,31 @@ static inline bool arch_irq_unlocked(unsigned int key)
 {
 	return key == 0;
 }
+static inline unsigned int arch_irq_lock(void)
+{
+	return irq_lock();
+}
+static inline void arch_irq_unlock(unsigned int key)
+{
+	irq_unlock(key);
+}
+struct k_spinlock {
+	unsigned int held;
+};
+typedef unsigned int k_spinlock_key_t;
+/* The lock is modeled as a local IRQ lock; it must not be taken recursively. */
+static inline k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
+{
+	sail_check(!l->held);
+	l->held = 1U;
+	return irq_lock();
+}
+static inline void k_spin_unlock(struct k_spinlock *l, k_spinlock_key_t key)
+{
+	sail_check(l->held);
+	l->held = 0U;
+	irq_unlock(key);
+}
 struct device {
 	bool ready;
 };

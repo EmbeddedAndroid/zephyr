@@ -45,12 +45,14 @@ struct sail_md_receive {
 	struct k_msgq queue;
 	char storage[SAIL_MD_RECEIVE_DEPTH * sizeof(struct sail_md_receive_event)] __aligned(4);
 	struct sail_md_receive_stats stats;
+	struct k_spinlock lock;
 };
 
 /*
  * Bind a receiver to a ready mbox device with MTU 4 and two channels. All calls
- * in this API are thread context only on a single CPU, and the mbox driver
- * calls must not sleep, since they run with local IRQs locked. The caller must
+ * in this API are thread context only. The callback and the API serialize on
+ * the receiver's spinlock, so they may run on different CPUs; the mbox driver
+ * calls must not sleep, since they run with that lock held. The caller must
  * own both channels exclusively; a previous client's callback is not restored.
  * Call once per object.
  *
