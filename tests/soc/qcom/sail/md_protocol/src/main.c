@@ -23,6 +23,7 @@ static const struct {
 	{UINT32_C(0xcd060000), SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN},
 	{UINT32_C(0xcd070000), SAIL_MD_COMMAND_SOC_HR},
 	{UINT32_C(0xcd0a0000), SAIL_MD_COMMAND_SDI_NOTICE},
+	{UINT32_C(0xcd010000), SAIL_MD_COMMAND_CRASH_NOTICE},
 };
 
 static enum sail_md_command expected(uint32_t word)
@@ -42,7 +43,6 @@ ZTEST(sail_md_protocol, test_exact_words_and_payloads)
 		0,
 		UINT32_MAX,
 		UINT32_C(0xcd000000),
-		UINT32_C(0xcd010000),
 		UINT32_C(0xcd020001),
 		UINT32_C(0xcd030000),
 		UINT32_C(0xcb000001),

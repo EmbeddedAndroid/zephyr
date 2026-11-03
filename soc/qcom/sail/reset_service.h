@@ -24,12 +24,25 @@ enum sail_reset_service_phase {
 #define SAIL_RESET_DEBUG_ENABLE      0xf1149000U
 #define SAIL_MD_PS_HOLD_MASK         0xf1149420U
 #define SAIL_MD_PS_HOLD_MASK_DEFAULT 0x0000ffffU
+/* Unmasks the states in which the crash-debug sequence follows MD_PS_HOLD. */
+#define SAIL_MD_PS_HOLD_MASK_FOLLOW  0x0000cff8U
+/* Reset debug enable for an MD_PS_HOLD reset. */
+#define SAIL_RESET_DEBUG_MD_PS_HOLD  0x00000200U
 
 /** Reset debug control on a board without a SAIL PMIC. */
 struct sail_reset_debug_result {
 	uint32_t before;
 	uint32_t after;
 	uint32_t mask_after;
+	uint8_t reads;
+	uint8_t writes;
+	bool valid;
+};
+
+/** Crash-debug notice handling: the mask chosen from the reset debug enables. */
+struct sail_crash_debug_result {
+	uint32_t enable;
+	uint32_t mask;
 	uint8_t reads;
 	uint8_t writes;
 	bool valid;
@@ -48,9 +61,11 @@ struct sail_reset_service_status {
 	uint8_t reply_attempted;
 	uint8_t reply_completed;
 	uint32_t sdi_answers;
+	uint32_t crash_answers;
 	struct sail_md_receive_stats receive;
 	struct monaco_reset_prepare_result preparation;
 	struct sail_reset_debug_result reset_debug;
+	struct sail_crash_debug_result crash_debug;
 	struct monaco_pmic_transaction_result transaction;
 };
 

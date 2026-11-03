@@ -32,7 +32,7 @@ static struct channel {
 	void *context;
 	bool enabled;
 } channels[2];
-static uint32_t early_replies, fail_early;
+static uint32_t early_replies, fail_early, crash_replies, fail_crash;
 static uint32_t retires, writes, replies, barriers, control_reads, io_count, inject_at;
 static uint32_t delay_first;
 static uint32_t fail_read, fail_write, fail_reply, fail_mbox, mbox_calls;
@@ -225,7 +225,7 @@ static int observed_write(void *ctx, uint32_t a, uint32_t v)
 static int controls_read(void *ctx, uint32_t a, uint32_t *v)
 {
 	(void)ctx;
-	sail_check(retired && !test_irq_depth);
+	sail_check((retired || service.status.word == 0xcd010000) && !test_irq_depth);
 	boundary();
 	control_reads++;
 	if (control_reads == fail_read) {
@@ -240,11 +240,14 @@ static int controls_read(void *ctx, uint32_t a, uint32_t *v)
 static int controls_write(void *ctx, uint32_t a, uint32_t v)
 {
 	(void)ctx;
-	sail_check(retired && !test_irq_depth);
+	sail_check((retired || service.status.word == 0xcd010000) && !test_irq_depth);
 	boundary();
 	writes++;
 	trace('C');
-	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+	if (service.status.word == 0xcd010000) {
+		/* The crash-debug notice writes only the PS_HOLD mask. */
+		sail_check(!retired && a == 0xf1149420 && (v == 0xcff8 || v == 0xffff));
+	} else if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		sail_check((a == 0xf1149000 && v == 0) || (a == 0xf1149420 && v == 0xffff));
 	} else {
 		sail_check((a == 0xf1149420 && v == 0xcff8) ||
@@ -256,6 +259,14 @@ static int controls_write(void *ctx, uint32_t a, uint32_t v)
 static int reply(void *ctx, uint32_t answer, uint32_t index)
 {
 	(void)ctx;
+	if (!service.status.claimed && service.status.word == 0xcd010000) {
+		/* A crash-debug answer: the mask is set and read back first, nothing retired. */
+		sail_check(test_irq_depth && !retired && index == crash_replies % 4);
+		sail_check(answer == 0xaa030000 && service.status.crash_debug.valid);
+		trace('K');
+		crash_replies++;
+		return crash_replies == fail_crash ? -EFAULT : 0;
+	}
 	if (!service.status.claimed) {
 		/* An SDI-disable answer outside a reset: no retirement, no effects. */
 		sail_check(test_irq_depth && !retired && !writes && index == early_replies % 4);
@@ -357,7 +368,7 @@ static void begin(void)
 	memset(&service, 0, sizeof(service));
 	memset(channels, 0, sizeof(channels));
 	retires = writes = replies = barriers = control_reads = io_count = inject_at = 0;
-	early_replies = fail_early = 0;
+	early_replies = fail_early = crash_replies = fail_crash = 0;
 	delay_first = 0;
 	fail_read = fail_write = fail_reply = fail_mbox = mbox_calls = 0;
 	wrong_control = bad_crc = bad_readback = stop_timer = reenter = retired = false;
@@ -712,6 +723,118 @@ static void shutdown_tests(void)
 	       "preservation/feedback/ownership/terminal ACK gates\n",
 	       domain);
 }
+static int crash_poll(uint32_t channel)
+{
+	emit(channel, 0xcd010000);
+	return sail_reset_poll(&service);
+}
+/*
+ * Crash-debug notice (0xcd010000): the main-domain PS_HOLD mask follows the
+ * MD_PS_HOLD reset debug enable and is read back, 0xaa030000 is answered and
+ * the coordinator keeps listening, so later notices are still handled. Every
+ * fault ends without an answer.
+ */
+static void crash_tests(void)
+{
+	static const struct {
+		uint32_t enable, mask;
+	} table[] = {{0, 0xffff}, {0x200, 0xcff8}, {0x47f2, 0xcff8}, {0x45f2, 0xffff}};
+	uint32_t domain = 0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(table); i++) {
+		begin();
+		*reg(&hardware, 0xf1149000) = table[i].enable;
+		uint32_t other = table[i].mask == 0xffff ? 0xcff8 : 0xffff;
+
+		*reg(&hardware, 0xf1149420) = other;
+		sail_check(!start());
+		emit(0, 0xcc010000);
+		sail_check(sail_reset_poll(&service) == 1);
+		reenter = true;
+		sail_check(crash_poll(1) == 1);
+		domain = io_count;
+		sail_check(crash_replies == 4 && !replies && !retires && writes == 1 &&
+			   control_reads == 2);
+		sail_check(order_count == 5 && memcmp(order, "CKKKK", 5) == 0);
+		sail_check(*reg(&hardware, 0xf1149420) == table[i].mask &&
+			   *reg(&hardware, 0xf1149000) == table[i].enable);
+		sail_check(service.status.phase == SAIL_RESET_SERVICE_LISTENING &&
+			   service.status.crash_answers == 1 && !service.status.claimed &&
+			   service.status.reply_attempted == 0);
+		sail_check(service.status.crash_debug.valid &&
+			   service.status.crash_debug.enable == table[i].enable &&
+			   service.status.crash_debug.mask == table[i].mask &&
+			   service.status.crash_debug.reads == 2 &&
+			   service.status.crash_debug.writes == 1);
+		sail_check(channels[0].enabled && channels[1].enabled);
+		/* A repeated notice is answered again. */
+		sail_check(crash_poll(1) == 1 && crash_replies == 8 &&
+			   service.status.crash_answers == 2);
+		reenter = false;
+	}
+	/* A reset notice after the crash-debug notice is still claimed and answered. */
+	begin();
+	sail_check(!start());
+	sail_check(crash_poll(1) == 1 && crash_replies == 4);
+	writes = control_reads = 0;
+	order_count = 0;
+	emit(1, 0xcd070000);
+	sail_check(sail_reset_poll(&service) == 1 && retires == 1 && replies == 4);
+	sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED);
+	no_retry();
+	/* Wrong channel, or after a reset claim: refused before any access. */
+	begin();
+	sail_check(!start());
+	sail_check(crash_poll(0) == -EPROTO && !crash_replies && !writes && !control_reads);
+	no_retry();
+	begin();
+	sail_check(!start());
+	emit(1, 0xcd070000);
+	sail_check(sail_reset_poll(&service) == 1 && replies == 4);
+	sail_check(crash_poll(1) == -EPROTO && !crash_replies && replies == 4);
+	sail_check(service.status.phase == SAIL_RESET_SERVICE_FAILED);
+	no_retry();
+	/* Each control read and the write fail once; a wrong readback; each answer store. */
+	for (uint32_t i = 1; i <= 2; i++) {
+		begin();
+		sail_check(!start());
+		fail_read = i;
+		sail_check(crash_poll(1) == -EFAULT && !crash_replies && control_reads == i);
+		no_retry();
+	}
+	begin();
+	sail_check(!start());
+	fail_write = 1;
+	sail_check(crash_poll(1) == -EFAULT && !crash_replies && writes == 1);
+	no_retry();
+	begin();
+	sail_check(!start());
+	wrong_control = true;
+	sail_check(crash_poll(1) == -EIO && !crash_replies && !service.status.crash_debug.valid);
+	no_retry();
+	for (uint32_t i = 1; i <= 4; i++) {
+		begin();
+		sail_check(!start());
+		fail_crash = i;
+		sail_check(crash_poll(1) == -EFAULT && crash_replies == i);
+		sail_check(service.status.crash_answers == 0 &&
+			   service.status.phase == SAIL_RESET_SERVICE_FAILED);
+		sail_check(!channels[0].enabled && !channels[1].enabled);
+		no_retry();
+	}
+	/* A notice arriving during the accesses is kept for the next poll, not lost. */
+	for (uint32_t i = 1; i <= domain; i++) {
+		begin();
+		sail_check(!start());
+		inject_at = i;
+		sail_check(crash_poll(1) == 1 && crash_replies == 4);
+		sail_check(sail_reset_poll(&service) == -EPROTO && service.status.consumed == 2);
+		no_retry();
+	}
+	printf("PASS: crash-debug notice: mask per reset debug enable, answer, keeps listening; "
+	       "channel, claim, 3 control, readback and 4 answer faults; %u arrival boundaries\n",
+	       domain);
+}
 static int lemans_poll(uint32_t word)
 {
 	emit(1, word);
@@ -823,6 +946,7 @@ int sail_model_test(void)
 		sail_check(fscanf(file, " %c %x %x", &e->kind, &e->address, &e->value) == 3);
 	}
 	sail_check(!fclose(file));
+	crash_tests();
 	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		return lemans_tests();
 	}

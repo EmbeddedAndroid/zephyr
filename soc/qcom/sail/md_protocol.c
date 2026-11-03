@@ -17,6 +17,8 @@ enum sail_md_command sail_md_command_decode(uint32_t raw)
 		return SAIL_MD_COMMAND_SOC_HR;
 	case UINT32_C(0xcd0a0000):
 		return SAIL_MD_COMMAND_SDI_NOTICE;
+	case UINT32_C(0xcd010000):
+		return SAIL_MD_COMMAND_CRASH_NOTICE;
 	case UINT32_C(0xcc020000):
 		return SAIL_MD_COMMAND_CC020000;
 	case UINT32_C(0xcc030000):

@@ -246,6 +246,9 @@ static int accept(struct sail_reset_service *s)
 	case SAIL_MD_COMMAND_SDI_NOTICE:
 		/* Also sent while the main domain boots; answered in poll. */
 		return event->channel == 1U && !s->status.claimed ? 0 : -EPROTO;
+	case SAIL_MD_COMMAND_CRASH_NOTICE:
+		/* Sent before the main domain's secure watchdog bites; answered in poll. */
+		return event->channel == 1U && !s->status.claimed ? 0 : -EPROTO;
 	case SAIL_MD_COMMAND_SOC_HR:
 	case SAIL_MD_COMMAND_WARM_RESET:
 	case SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN:
@@ -270,12 +273,10 @@ static int accept(struct sail_reset_service *s)
 
 /*
  * Caller holds the service lock: four ordered byte stores of one answer word. Only
- * the reset answer is counted per store; SDI answers are counted when complete.
+ * the reset answer is counted per store; other answers are counted when complete.
  */
-static int answer(struct sail_reset_service *s, uint32_t word)
+static int answer(struct sail_reset_service *s, uint32_t word, bool reset)
 {
-	bool reset = word != UINT32_C(0xaa0c0000);
-
 	for (uint32_t i = 0U; i < 4U; i++) {
 		int rc;
 
@@ -286,8 +287,70 @@ static int answer(struct sail_reset_service *s, uint32_t word)
 		}
 		s->status.reply_completed += reset;
 	}
-	s->status.sdi_answers += !reset;
+	if (!reset) {
+		if (word == UINT32_C(0xaa0c0000)) {
+			s->status.sdi_answers++;
+		} else {
+			s->status.crash_answers++;
+		}
+	}
 	return 0;
+}
+
+/* Liveness while a notice that claims nothing is handled outside the lock. */
+static int listening(struct sail_reset_service *s)
+{
+	k_spinlock_key_t key = k_spin_lock(&s->lock);
+	int rc = s->busy && s->active && !s->status.claimed && eligible(s, s->boot) ? history(s)
+										      : -ESTALE;
+
+	k_spin_unlock(&s->lock, key);
+	return rc;
+}
+
+/*
+ * The crash-debug notice precedes a main-domain watchdog reset. The
+ * main-domain PS_HOLD mask is set so that the crash-debug sequence follows
+ * MD_PS_HOLD only when its reset debug enable is set, and read back. Nothing
+ * is claimed: the coordinator keeps listening.
+ */
+static int crash_debug(struct sail_reset_service *s)
+{
+	struct sail_crash_debug_result *d = &s->status.crash_debug;
+	const struct monaco_timer_io *io = &s->controls;
+	uint32_t mask;
+	int rc;
+
+	*d = (struct sail_crash_debug_result){0};
+	rc = listening(s);
+	if (rc == 0) {
+		d->reads++;
+		rc = io->read32(io->context, SAIL_RESET_DEBUG_ENABLE, &d->enable);
+		rc = rc > 0 ? -EIO : rc;
+	}
+	if (rc == 0) {
+		rc = listening(s);
+	}
+	mask = (d->enable & SAIL_RESET_DEBUG_MD_PS_HOLD) != 0U ? SAIL_MD_PS_HOLD_MASK_FOLLOW
+							       : SAIL_MD_PS_HOLD_MASK_DEFAULT;
+	if (rc == 0) {
+		d->writes++;
+		rc = io->write32(io->context, SAIL_MD_PS_HOLD_MASK, mask);
+		rc = rc > 0 ? -EIO : rc;
+	}
+	if (rc == 0) {
+		d->reads++;
+		rc = io->read32(io->context, SAIL_MD_PS_HOLD_MASK, &d->mask);
+		rc = rc > 0 ? -EIO : rc;
+	}
+	if (rc == 0 && (d->mask & 0xffffU) != mask) {
+		rc = -EIO;
+	}
+	if (rc != 0) {
+		return rc;
+	}
+	d->valid = true;
+	return listening(s);
 }
 
 /*
@@ -367,9 +430,26 @@ int sail_reset_poll(struct sail_reset_service *s)
 	if (rc == 0) {
 		rc = accept(s);
 	}
+	if (rc == 0 && sail_md_command_decode(s->status.word) == SAIL_MD_COMMAND_CRASH_NOTICE) {
+		/* IRQs remain enabled during the control accesses. */
+		k_spin_unlock(&s->lock, key);
+		rc = crash_debug(s);
+		key = k_spin_lock(&s->lock);
+		if (rc == 0) {
+			rc = s->active && eligible(s, s->boot) ? history(s) : -ESTALE;
+		}
+		if (rc == 0) {
+			rc = answer(s, UINT32_C(0xaa030000), false);
+		}
+		if (rc == 0) {
+			s->busy = false;
+			k_spin_unlock(&s->lock, key);
+			return 1;
+		}
+	}
 	/* accept() admits this only before a claim or right after the reset answer. */
 	if (rc == 0 && sail_md_command_decode(s->status.word) == SAIL_MD_COMMAND_SDI_NOTICE) {
-		rc = answer(s, UINT32_C(0xaa0c0000));
+		rc = answer(s, UINT32_C(0xaa0c0000), false);
 		if (rc == 0 && s->status.phase == SAIL_RESET_SERVICE_ACKED) {
 			s->active = false;
 			rc = cleanup(s);
@@ -446,8 +526,10 @@ int sail_reset_poll(struct sail_reset_service *s)
 	if (rc == 0) {
 		s->status.phase = SAIL_RESET_SERVICE_REPLY;
 		/* The stock firmware answers a warm reset with 0xaa070000. */
-		rc = answer(s, s->status.word == UINT32_C(0xcd050000) ? UINT32_C(0xaa070000)
-								    : UINT32_C(0xaa030000));
+		rc = answer(s,
+			    s->status.word == UINT32_C(0xcd050000) ? UINT32_C(0xaa070000)
+								   : UINT32_C(0xaa030000),
+			    true);
 	}
 	if (rc == 0) {
 		/* The MD may follow with its SDI-disable notice; keep receiving for it. */

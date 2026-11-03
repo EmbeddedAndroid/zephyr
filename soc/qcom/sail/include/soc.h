@@ -99,7 +99,11 @@ int sail_reset_service_start(int (*retire)(void *context), void *context);
  *
  * Call only from the thread that started the service. DDR-ready and boot
  * notices are accepted without effect. A secure SDI-disable notice gets
- * 0xaa0c0000. A secure SOC_HR (0xcd070000) notice retires application
+ * 0xaa0c0000. A secure crash-debug notice (0xcd010000), which precedes a
+ * main-domain watchdog reset, sets the main-domain PS_HOLD mask to follow
+ * MD_PS_HOLD (0xcff8) if the MD_PS_HOLD reset debug enable is set and to
+ * ignore it (0xffff) otherwise, reads it back, answers 0xaa030000 and keeps
+ * listening. A secure SOC_HR (0xcd070000) notice retires application
  * resources, prepares the reset controls and the PMIC reset policy, waits 50 ms
  * and answers 0xaa030000 as four byte stores. A secure graceful shutdown
  * (0xcd060000) notice retires resources, prepares the PMIC for power-off and
