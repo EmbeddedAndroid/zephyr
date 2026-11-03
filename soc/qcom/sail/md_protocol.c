@@ -19,6 +19,24 @@ enum sail_md_command sail_md_command_decode(uint32_t raw)
 		return SAIL_MD_COMMAND_SDI_NOTICE;
 	case UINT32_C(0xcd010000):
 		return SAIL_MD_COMMAND_CRASH_NOTICE;
+	case UINT32_C(0xcd000000):
+		return SAIL_MD_COMMAND_CD000000;
+	case UINT32_C(0xcd030000):
+		return SAIL_MD_COMMAND_CD030000;
+	case UINT32_C(0xcc070000):
+		return SAIL_MD_COMMAND_CC070000;
+	case UINT32_C(0xcb000001):
+		return SAIL_MD_COMMAND_CB000001;
+	case UINT32_C(0xcb00001f):
+		return SAIL_MD_COMMAND_CB00001F;
+	case UINT32_C(0xcb00003f):
+		return SAIL_MD_COMMAND_CB00003F;
+	case UINT32_C(0xd0000000):
+		return SAIL_MD_COMMAND_D0000000;
+	case UINT32_C(0xd0020000):
+		return SAIL_MD_COMMAND_D0020000;
+	case UINT32_C(0xd0030000):
+		return SAIL_MD_COMMAND_D0030000;
 	case UINT32_C(0xcc020000):
 		return SAIL_MD_COMMAND_CC020000;
 	case UINT32_C(0xcc030000):
@@ -34,6 +52,9 @@ enum sail_md_command sail_md_command_decode(uint32_t raw)
 	case UINT32_C(0xcb00000f):
 		return SAIL_MD_COMMAND_HYP_BOOT_NOTICE;
 	default:
+		if ((raw & UINT32_C(0xffff0000)) == UINT32_C(0xd0010000) && (raw & 0xffffU) != 0U) {
+			return SAIL_MD_COMMAND_D001_ERROR;
+		}
 		return SAIL_MD_COMMAND_UNKNOWN;
 	}
 }

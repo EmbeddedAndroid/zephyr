@@ -24,10 +24,22 @@ static const struct {
 	{UINT32_C(0xcd070000), SAIL_MD_COMMAND_SOC_HR},
 	{UINT32_C(0xcd0a0000), SAIL_MD_COMMAND_SDI_NOTICE},
 	{UINT32_C(0xcd010000), SAIL_MD_COMMAND_CRASH_NOTICE},
+	{UINT32_C(0xcd000000), SAIL_MD_COMMAND_CD000000},
+	{UINT32_C(0xcd030000), SAIL_MD_COMMAND_CD030000},
+	{UINT32_C(0xcc070000), SAIL_MD_COMMAND_CC070000},
+	{UINT32_C(0xcb000001), SAIL_MD_COMMAND_CB000001},
+	{UINT32_C(0xcb00001f), SAIL_MD_COMMAND_CB00001F},
+	{UINT32_C(0xcb00003f), SAIL_MD_COMMAND_CB00003F},
+	{UINT32_C(0xd0000000), SAIL_MD_COMMAND_D0000000},
+	{UINT32_C(0xd0020000), SAIL_MD_COMMAND_D0020000},
+	{UINT32_C(0xd0030000), SAIL_MD_COMMAND_D0030000},
 };
 
 static enum sail_md_command expected(uint32_t word)
 {
+	if ((word >> 16) == 0xd001U && (word & 0xffffU) != 0U) {
+		return SAIL_MD_COMMAND_D001_ERROR;
+	}
 	for (size_t i = 0; i < ARRAY_SIZE(known); ++i) {
 		if (known[i].word == word) {
 			return known[i].command;
@@ -42,15 +54,8 @@ ZTEST(sail_md_protocol, test_exact_words_and_payloads)
 	static const uint32_t other[] = {
 		0,
 		UINT32_MAX,
-		UINT32_C(0xcd000000),
 		UINT32_C(0xcd020001),
-		UINT32_C(0xcd030000),
-		UINT32_C(0xcb000001),
-		UINT32_C(0xcb00001f),
-		UINT32_C(0xcb00003f),
-		UINT32_C(0xd0030000),
-		UINT32_C(0xd0000000),
-		UINT32_C(0xd0020000),
+		UINT32_C(0xd0010000),
 		UINT32_C(0xaa010000),
 		UINT32_C(0xaa020000),
 		UINT32_C(0xaa030000),
@@ -60,7 +65,6 @@ ZTEST(sail_md_protocol, test_exact_words_and_payloads)
 		UINT32_C(0xaa070000),
 		UINT32_C(0xaa080000),
 		UINT32_C(0xaa0c0000),
-		UINT32_C(0xcc070000),
 		UINT32_C(0xcd080000),
 		UINT32_C(0xcd090000),
 		UINT32_C(0x000001cc),
@@ -86,9 +90,9 @@ ZTEST(sail_md_protocol, test_exact_words_and_payloads)
 		uint32_t word = high << 16;
 
 		zassert_true(sail_md_command_decode(word) == expected(word));
-		/* D001xxxx words are outside this API's subset. */
+		/* A D001xxxx word carries an error code in its low half; zero is none. */
 		zassert_true(sail_md_command_decode(UINT32_C(0xd0010000) | high) ==
-			     SAIL_MD_COMMAND_UNKNOWN);
+			     (high != 0U ? SAIL_MD_COMMAND_D001_ERROR : SAIL_MD_COMMAND_UNKNOWN));
 	}
 	for (size_t i = 0; i < ARRAY_SIZE(other); ++i) {
 		zassert_true(sail_md_command_decode(other[i]) == SAIL_MD_COMMAND_UNKNOWN);
@@ -102,7 +106,7 @@ ZTEST(sail_md_protocol, test_xbl_boot_success_exact_word)
 	for (unsigned int bit = 0; bit < 32; ++bit) {
 		uint32_t word = UINT32_C(0xcb000003) ^ (UINT32_C(1) << bit);
 
-		/* Bit 2 selects the secure boot notice; every other mutation is unknown. */
+		/* Bits 1 and 2 select other boot notices; every other mutation is unknown. */
 		zassert_equal(sail_md_command_decode(word), expected(word));
 	}
 	zassert_equal(sail_md_command_decode(UINT32_C(0x030000cb)), SAIL_MD_COMMAND_UNKNOWN);

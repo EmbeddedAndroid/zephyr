@@ -110,8 +110,15 @@ int sail_reset_service_start(int (*retire)(void *context), void *context);
  * answers at once; the reset controls are not touched. A secure warm reset
  * (0xcd050000) notice retires resources, sets the PMIC warm reset policy
  * (C9=01, CB=0a, CC=00, read back) and answers 0xaa070000 at once, as the
- * stock SAIL firmware does. On a board without a SAIL PMIC all three notices
- * retire resources, clear the reset debug enables and
+ * stock SAIL firmware does. The secure 0xcd000000 is handled as SOC_HR and the
+ * secure 0xcd030000 as a warm reset answered 0xaa030000. The boot firmware
+ * requests 0xcc020000 and 0xcc050000 (hard reset, answered 0xaa070000),
+ * 0xcc030000 (warm reset, answered 0xaa030000) and 0xcc040000 (warm reset,
+ * answered 0xaa070000) are accepted on either channel. Before a claim, the
+ * progress and error reports 0xcb000001, 0xcb00001f, 0xcb00003f, 0xcc070000,
+ * 0xd0000000, 0xd0020000, 0xd0030000 and 0xd001xxxx (non-zero low half) are
+ * accepted without effect. On a board without a SAIL PMIC all reset and
+ * shutdown notices retire resources, clear the reset debug enables and
  * restore the main-domain PS_HOLD mask if the debug enables are set (both read
  * back), and answer at once; the main domain's PS_HOLD then resets or powers
  * off the board through the main PMIC. The main domain's

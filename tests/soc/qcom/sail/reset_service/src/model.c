@@ -256,6 +256,18 @@ static int controls_write(void *ctx, uint32_t a, uint32_t v)
 	*reg(&hardware, a) = v;
 	return writes == fail_write ? -EFAULT : 0; /* failure after the modeled effect */
 }
+static bool warm_word(uint32_t word)
+{
+	return word == 0xcd050000 || word == 0xcd030000 || word == 0xcc030000 ||
+	       word == 0xcc040000;
+}
+static uint32_t expected_answer(uint32_t word)
+{
+	return word == 0xcd050000 || word == 0xcc020000 || word == 0xcc040000 ||
+			       word == 0xcc050000
+		       ? 0xaa070000
+		       : 0xaa030000;
+}
 static int reply(void *ctx, uint32_t answer, uint32_t index)
 {
 	(void)ctx;
@@ -275,16 +287,15 @@ static int reply(void *ctx, uint32_t answer, uint32_t index)
 		return early_replies == fail_early ? -EFAULT : 0;
 	}
 	sail_check(test_irq_depth && retired && index == replies % 4);
-	sail_check(answer == (replies >= 4			       ? 0xaa0c0000
-			      : service.status.word == 0xcd050000 ? 0xaa070000
-								   : 0xaa030000));
+	sail_check(answer ==
+		   (replies >= 4 ? 0xaa0c0000 : expected_answer(service.status.word)));
 	trace('A');
 	if (replies >= 4) {
 		sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED &&
 		       service.status.word == 0xcd0a0000);
 	} else if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		sail_check(service.status.reset_debug.valid && !service.transaction.result.phase);
-	} else if (service.status.word == 0xcd050000) {
+	} else if (warm_word(service.status.word)) {
 		sail_check(service.transaction.result.phase ==
 			   MONACO_PMIC_TRANSACTION_WARM_VERIFIED);
 		sail_check(service.transaction.result.pmic.stage == MONACO_PMIC_RESET_VERIFIED);
@@ -723,6 +734,78 @@ static void shutdown_tests(void)
 	       "preservation/feedback/ownership/terminal ACK gates\n",
 	       domain);
 }
+/*
+ * The remaining reset-class words claim, retire and get the action and answer
+ * of their class; progress and error reports are accepted without effect
+ * before a claim and refused after one.
+ */
+static void word_tests(void)
+{
+	static const struct {
+		uint32_t word, channel;
+	} resets[] = {{0xcd000000, 1}, {0xcd030000, 1}, {0xcc020000, 0}, {0xcc020000, 1},
+		      {0xcc030000, 0}, {0xcc030000, 1}, {0xcc040000, 0}, {0xcc040000, 1},
+		      {0xcc050000, 0}, {0xcc050000, 1}};
+	static const uint32_t reports[] = {0xcb000001, 0xcb00001f, 0xcb00003f, 0xcc070000,
+					   0xd0000000, 0xd0020000, 0xd0030000, 0xd0010001,
+					   0xd001ffff};
+
+	for (size_t i = 0; i < ARRAY_SIZE(resets); i++) {
+		begin();
+		sail_check(!start());
+		emit(0, 0xcc010000);
+		sail_check(sail_reset_poll(&service) == 1);
+		emit(resets[i].channel, resets[i].word);
+		sail_check(sail_reset_poll(&service) == 1 && retires == 1 && replies == 4);
+		sail_check(service.status.phase == SAIL_RESET_SERVICE_ACKED &&
+			   service.status.reply_completed == 4);
+		if (SAIL_TEST_CHIP == &sail_chip_lemans) {
+			sail_check(!service.transaction.result.phase && writes == 0);
+		} else if (warm_word(resets[i].word)) {
+			sail_check(hardware.pmic[0xc9] == 1 && writes == 0);
+		} else {
+			sail_check(writes == 2 && hardware.pmic[0xcc] == 1);
+		}
+		no_retry();
+	}
+	/* The secure-firmware words are refused on the non-secure channel. */
+	for (uint32_t w = 0xcd000000; w <= 0xcd030000; w += 0x30000) {
+		begin();
+		sail_check(!start());
+		emit(0, w);
+		sail_check(sail_reset_poll(&service) == -EPERM && !retires && !replies);
+		no_retry();
+	}
+	for (size_t i = 0; i < ARRAY_SIZE(reports); i++) {
+		for (uint32_t ch = 0; ch < 2; ch++) {
+			begin();
+			sail_check(!start());
+			for (uint32_t n = 1; n <= 2; n++) {
+				emit(ch, reports[i]);
+				sail_check(sail_reset_poll(&service) == 1);
+				sail_check(service.status.phase == SAIL_RESET_SERVICE_LISTENING);
+			}
+			sail_check(!retires && !writes && !replies && !early_replies);
+			sail_check(!control_reads && channels[0].enabled && channels[1].enabled);
+			emit(1, 0xcd070000);
+			sail_check(sail_reset_poll(&service) == 1 && replies == 4);
+			emit(ch, reports[i]);
+			sail_check(sail_reset_poll(&service) == -EPROTO && replies == 4);
+			no_retry();
+		}
+	}
+	/* A second reset-class word after a claim is refused without an answer. */
+	begin();
+	sail_check(!start());
+	emit(0, 0xcc030000);
+	sail_check(sail_reset_poll(&service) == 1 && replies == 4);
+	emit(0, 0xcc050000);
+	sail_check(sail_reset_poll(&service) == -EPROTO && replies == 4 && retires == 1);
+	no_retry();
+	printf("PASS: %zu reset-class word/channel pairs with their action and answer; secure "
+	       "words refused on the non-secure channel; %zu reports accepted without effect\n",
+	       ARRAY_SIZE(resets), ARRAY_SIZE(reports));
+}
 static int crash_poll(uint32_t channel)
 {
 	emit(channel, 0xcd010000);
@@ -947,6 +1030,7 @@ int sail_model_test(void)
 	}
 	sail_check(!fclose(file));
 	crash_tests();
+	word_tests();
 	if (SAIL_TEST_CHIP == &sail_chip_lemans) {
 		return lemans_tests();
 	}
@@ -1012,7 +1096,8 @@ int sail_model_test(void)
 		no_retry();
 	}
 	/* Unsupported, bit-mutated and wrong-channel inputs never act. */
-	const uint32_t denied[] = {0, 0xcc010001, 0xcd060000, 0xcd0a0000, 0xcc020000, 0xcb000002};
+	const uint32_t denied[] = {0, 0xcc010001, 0xcd060000, 0xcd0a0000, 0xcd030000, 0xcb000002,
+				   0xd0010000};
 
 	for (size_t i = 0; i < ARRAY_SIZE(denied); i++) {
 		begin();
@@ -1022,8 +1107,8 @@ int sail_model_test(void)
 		no_retry();
 	}
 	for (uint32_t bit = 0; bit < 32; bit++) {
-		/* These exact mutations are the supported CD06 and CD05 opcodes. */
-		if (bit == 16U || bit == 17U) {
+		/* These exact mutations are the supported CD06, CD05, CD03 and CC07 words. */
+		if (bit == 16U || bit == 17U || bit == 18U || bit == 24U) {
 			continue;
 		}
 		begin();

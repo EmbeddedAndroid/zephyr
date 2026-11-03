@@ -207,10 +207,60 @@ int sail_reset_start(struct sail_reset_service *s, struct monaco_cold_boot *boot
 	return rc != 0 ? failed(s, rc) : 0;
 }
 
+enum reset_action {
+	RESET_ACTION_HARD,
+	RESET_ACTION_WARM,
+	RESET_ACTION_SHUTDOWN,
+};
+
+static enum reset_action reset_action(uint32_t word)
+{
+	switch (sail_md_command_decode(word)) {
+	case SAIL_MD_COMMAND_WARM_RESET:
+	case SAIL_MD_COMMAND_CD030000:
+	case SAIL_MD_COMMAND_CC030000:
+	case SAIL_MD_COMMAND_CC040000:
+		return RESET_ACTION_WARM;
+	case SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN:
+		return RESET_ACTION_SHUTDOWN;
+	default:
+		return RESET_ACTION_HARD;
+	}
+}
+
+static uint32_t reset_answer(uint32_t word)
+{
+	switch (sail_md_command_decode(word)) {
+	case SAIL_MD_COMMAND_WARM_RESET:
+	case SAIL_MD_COMMAND_CC020000:
+	case SAIL_MD_COMMAND_CC040000:
+	case SAIL_MD_COMMAND_CC050000:
+		return UINT32_C(0xaa070000);
+	default:
+		return UINT32_C(0xaa030000);
+	}
+}
+
+static int claim(struct sail_reset_service *s)
+{
+	int rc;
+
+	s->status.claimed = true;
+	rc = history(s);
+	if (rc != 0) {
+		return rc;
+	}
+	/* Set before calling the application: a failed retire may have partial effects. */
+	s->status.retirement_attempted = true;
+	s->status.phase = SAIL_RESET_SERVICE_RETIRED;
+	rc = s->retire(s->context);
+	s->status.retirement_error = rc < 0 ? rc : rc != 0 ? -EIO : 0;
+	return rc != 0 ? s->status.retirement_error : history(s);
+}
+
 static int accept(struct sail_reset_service *s)
 {
 	const struct sail_md_receive_event *event = &s->status.event;
-	int rc;
 
 	s->status.word = (uint32_t)event->bytes[0] | (uint32_t)event->bytes[1] << 8 |
 			 (uint32_t)event->bytes[2] << 16 | (uint32_t)event->bytes[3] << 24;
@@ -250,22 +300,31 @@ static int accept(struct sail_reset_service *s)
 		/* Sent before the main domain's secure watchdog bites; answered in poll. */
 		return event->channel == 1U && !s->status.claimed ? 0 : -EPROTO;
 	case SAIL_MD_COMMAND_SOC_HR:
+	case SAIL_MD_COMMAND_CD000000:
 	case SAIL_MD_COMMAND_WARM_RESET:
+	case SAIL_MD_COMMAND_CD030000:
 	case SAIL_MD_COMMAND_GRACEFUL_SHUTDOWN:
+		/* Sent by the secure firmware only. */
 		if (event->channel != 1U || s->status.claimed) {
 			return -EPERM;
 		}
-		s->status.claimed = true;
-		rc = history(s);
-		if (rc != 0) {
-			return rc;
-		}
-		/* Set before calling the application: a failed retire may have partial effects. */
-		s->status.retirement_attempted = true;
-		s->status.phase = SAIL_RESET_SERVICE_RETIRED;
-		rc = s->retire(s->context);
-		s->status.retirement_error = rc < 0 ? rc : rc != 0 ? -EIO : 0;
-		return rc != 0 ? s->status.retirement_error : history(s);
+		return claim(s);
+	case SAIL_MD_COMMAND_CC020000:
+	case SAIL_MD_COMMAND_CC030000:
+	case SAIL_MD_COMMAND_CC040000:
+	case SAIL_MD_COMMAND_CC050000:
+		/* Boot firmware requests; they may come on either channel. */
+		return s->status.claimed ? -EPERM : claim(s);
+	case SAIL_MD_COMMAND_CC070000:
+	case SAIL_MD_COMMAND_CB000001:
+	case SAIL_MD_COMMAND_CB00001F:
+	case SAIL_MD_COMMAND_CB00003F:
+	case SAIL_MD_COMMAND_D0000000:
+	case SAIL_MD_COMMAND_D0020000:
+	case SAIL_MD_COMMAND_D0030000:
+	case SAIL_MD_COMMAND_D001_ERROR:
+		/* Progress and error reports: recorded, never answered. */
+		return s->status.claimed ? -EPROTO : 0;
 	default:
 		return -EPROTO;
 	}
@@ -479,7 +538,7 @@ int sail_reset_poll(struct sail_reset_service *s)
 		if (rc != 0) {
 			return failed(s, rc);
 		}
-	} else if (s->status.word == UINT32_C(0xcd050000)) {
+	} else if (reset_action(s->status.word) == RESET_ACTION_WARM) {
 		s->status.phase = SAIL_RESET_SERVICE_PMIC;
 		rc = monaco_pmic_warm_transaction_run(&s->transaction, s->boot, eligible, live, s);
 		s->status.transaction = s->transaction.result;
@@ -490,7 +549,7 @@ int sail_reset_poll(struct sail_reset_service *s)
 		    s->status.transaction.pmic.stage != MONACO_PMIC_RESET_VERIFIED) {
 			return failed(s, -EIO);
 		}
-	} else if (s->status.word == UINT32_C(0xcd060000)) {
+	} else if (reset_action(s->status.word) == RESET_ACTION_SHUTDOWN) {
 		s->status.phase = SAIL_RESET_SERVICE_PMIC;
 		rc = monaco_pmic_shutdown_transaction_run(&s->transaction, s->boot, eligible, live,
 							  s);
@@ -525,11 +584,7 @@ int sail_reset_poll(struct sail_reset_service *s)
 	rc = eligible(s, s->boot) ? history(s) : -ESTALE;
 	if (rc == 0) {
 		s->status.phase = SAIL_RESET_SERVICE_REPLY;
-		/* The stock firmware answers a warm reset with 0xaa070000. */
-		rc = answer(s,
-			    s->status.word == UINT32_C(0xcd050000) ? UINT32_C(0xaa070000)
-								   : UINT32_C(0xaa030000),
-			    true);
+		rc = answer(s, reset_answer(s->status.word), true);
 	}
 	if (rc == 0) {
 		/* The MD may follow with its SDI-disable notice; keep receiving for it. */
